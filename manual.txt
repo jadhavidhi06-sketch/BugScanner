@@ -1,0 +1,915 @@
+╔══════════════════════════════════════════════════════════════════════════════╗
+║                                                                              ║
+║              BUG BOUNTY VULNERABILITY SCANNER v1.0                           ║
+║                    COMPREHENSIVE USER MANUAL                                 ║
+║                                                                              ║
+╚══════════════════════════════════════════════════════════════════════════════╝
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│                              TABLE OF CONTENTS                              │
+├──────────────────────────────────────────────────────────────────────────────┤
+│ 1. INTRODUCTION                                                             │
+│ 2. SYSTEM REQUIREMENTS                                                      │
+│ 3. INSTALLATION GUIDE                                                       │
+│ 4. QUICK START                                                              │
+│ 5. COMMAND-LINE ARGUMENTS                                                   │
+│ 6. SCANNING MODULES IN DETAIL                                               │
+│    6.1 Target Reconnaissance                                                │
+│    6.2 Security Headers Analyzer                                            │
+│    6.3 SSL/TLS Analyzer                                                     │
+│    6.4 Sensitive Files Discovery                                            │
+│    6.5 Parameter Fuzzer                                                     │
+│    6.6 Open Redirect Checker                                                │
+│    6.7 Report Generator                                                     │
+│ 7. UNDERSTANDING SEVERITY LEVELS                                            │
+│ 8. OUTPUT AND REPORTS                                                       │
+│ 9. CUSTOM WORDLISTS                                                         │
+│ 10. PERFORMANCE TUNING                                                      │
+│ 11. TROUBLESHOOTING                                                         │
+│ 12. BEST PRACTICES                                                          │
+│ 13. LEGAL AND ETHICAL GUIDELINES                                            │
+│ 14. FAQ                                                                     │
+│ 15. APPENDIX A: DEFAULT WORDLIST                                            │
+│ 16. APPENDIX B: SENSITIVE PATHS CHECKED                                     │
+│ 17. APPENDIX C: ERROR CODES AND MESSAGES                                    │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│ 1. INTRODUCTION                                                             │
+├──────────────────────────────────────────────────────────────────────────────┤
+
+The Bug Bounty Vulnerability Scanner is a comprehensive, multi-module security 
+scanning tool designed specifically for authorized bug bounty hunting and 
+penetration testing. It automates the reconnaissance and vulnerability 
+discovery process, helping security researchers identify potential security 
+issues in web applications and network services.
+
+Key Capabilities:
+  • DNS reconnaissance and subdomain enumeration
+  • Security header analysis
+  • SSL/TLS configuration auditing
+  • Sensitive file and endpoint discovery
+  • Parameter fuzzing for SQLi and XSS
+  • Open redirect detection
+  • Professional report generation (JSON/TXT)
+
+⚠️  IMPORTANT LEGAL NOTICE:
+   This tool is intended SOLELY for authorized security testing. You must:
+   - Have explicit written permission from the target owner
+   - Only scan targets listed in active bug bounty programs
+   - Comply with all applicable laws and regulations
+   - Submit proof of authorization with your findings
+   
+   Unauthorized use is illegal and may result in criminal prosecution.
+
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│ 2. SYSTEM REQUIREMENTS                                                      │
+├──────────────────────────────────────────────────────────────────────────────┤
+
+Minimum Requirements:
+  • Operating System: Windows 10+, macOS 10.15+, or Linux (kernel 4.0+)
+  • Python: Version 3.7 or higher
+  • RAM: 512 MB minimum (1 GB recommended)
+  • Storage: 50 MB free space
+  • Network: Internet connection with DNS resolution capability
+
+Required Python Libraries:
+  • requests (>= 2.31.0)  - HTTP client library
+  • dnspython (>= 2.4.2)  - DNS toolkit
+
+Built-in Python Modules Used:
+  • socket      - Network connections and port scanning
+  • ssl         - SSL/TLS certificate analysis
+  • re          - Regular expression pattern matching
+  • datetime    - Timestamp generation
+  • json        - Report serialization
+  • concurrent.futures - Parallel task execution
+
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│ 3. INSTALLATION GUIDE                                                       │
+├──────────────────────────────────────────────────────────────────────────────┤
+
+Step 1: Install Python 3.7+
+  • Windows: Download from https://www.python.org/downloads/
+  • macOS:   brew install python3
+  • Linux:   sudo apt-get install python3 python3-pip
+
+Step 2: Verify Python Installation
+  python3 --version
+  pip3 --version
+
+Step 3: Install Required Libraries
+  pip3 install -r requirements.txt
+  
+  Or install individually:
+  pip3 install requests
+  pip3 install dnspython
+
+Step 4: Download the Scanner
+  Save bugscanner.py to your working directory.
+
+Step 5: Make Executable (Linux/macOS)
+  chmod +x bugscanner.py
+
+Step 6: Verify Installation
+  python3 bugscanner.py --help
+
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│ 4. QUICK START                                                              │
+├──────────────────────────────────────────────────────────────────────────────┤
+
+Basic Usage:
+  python3 bugscanner.py example.com
+
+With Custom Wordlist:
+  python3 bugscanner.py example.com my_subdomains.txt
+
+What Happens During a Scan:
+  1. DNS records are fetched (A, MX, NS, TXT)
+  2. IP address is resolved
+  3. Subdomains are enumerated (using wordlist)
+  4. Common ports are scanned
+  5. Security headers are analyzed
+  6. SSL/TLS certificate is inspected
+  7. Sensitive files are checked
+  8. Parameters are fuzzed for vulnerabilities
+  9. Open redirects are tested
+  10. Reports are generated (JSON and TXT)
+
+Example Output:
+  $ python3 bugscanner.py example.com
+  
+  [+] Performing DNS Reconnaissance...
+  [Info] A Records Found: Found 2 A records for example.com
+  
+  [+] Resolving IP Address...
+  [Info] IP Address Resolved: Target example.com resolves to 93.184.216.34
+  
+  [+] Enumerating Subdomains...
+    [+] Found subdomain: www.example.com
+    [+] Found subdomain: mail.example.com
+  [Info] Found 2 Subdomains
+  
+  [+] Scanning Common Ports...
+    [+] Port 80 is open
+    [+] Port 443 is open
+  [Medium] Found 2 Open Ports
+  
+  [High] Missing Strict-Transport-Security Header
+  [High] Missing Content-Security-Policy Header
+  
+  [Critical] Potential SQL Injection in parameter: id
+  
+  [+] Generating Report...
+    [+] Report saved to bugbounty_report_example.com_20240101_120000.json
+    [+] Report saved to bugbounty_report_example.com_20240101_120000.txt
+
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│ 5. COMMAND-LINE ARGUMENTS                                                   │
+├──────────────────────────────────────────────────────────────────────────────┤
+
+SYNTAX:
+  python3 bugscanner.py <target_domain> [wordlist_file]
+
+ARGUMENTS:
+  target_domain   (Required) The domain to scan (e.g., example.com)
+                  Do not include http:// or https://
+  
+  wordlist_file   (Optional) Path to a custom subdomain wordlist file
+                  One subdomain per line (e.g., www, mail, admin)
+                  If omitted, a built-in wordlist of 200+ entries is used
+
+EXAMPLES:
+  # Scan with default wordlist
+  python3 bugscanner.py example.com
+  
+  # Scan with custom wordlist
+  python3 bugscanner.py example.com my_wordlist.txt
+  
+  # Scan with IP address (not recommended, use domain)
+  python3 bugscanner.py 192.168.1.1
+  
+  # Scan with subdomain
+  python3 bugscanner.py sub.example.com
+
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│ 6. SCANNING MODULES IN DETAIL                                               │
+├──────────────────────────────────────────────────────────────────────────────┤
+
+6.1 Target Reconnaissance
+─────────────────────────
+
+Purpose:
+  Gather initial information about the target domain and its infrastructure.
+
+What It Checks:
+  • DNS Records:
+    - A Records: IPv4 addresses
+    - MX Records: Mail exchange servers
+    - NS Records: Name servers
+    - TXT Records: Text records (SPF, DKIM, etc.)
+  
+  • IP Resolution:
+    - Resolves domain to IPv4 address
+  
+  • Subdomain Enumeration:
+    - Tests each entry from wordlist against the target domain
+    - Reports all resolving subdomains
+  
+  • Port Scanning:
+    - Checks ports: 80, 443, 8080, 8443, 21, 22
+    - Reports open ports
+
+Severity: Info (informational findings)
+
+Example Finding:
+  [Info] A Records Found
+  [Info] Found 2 Subdomains
+  [Medium] Found 3 Open Ports
+
+
+6.2 Security Headers Analyzer
+─────────────────────────────
+
+Purpose:
+  Identify missing security headers that could expose the application to attacks.
+
+Headers Checked:
+  • Strict-Transport-Security (HSTS)  - [High] Forces HTTPS connections
+  • Content-Security-Policy (CSP)     - [High] Prevents XSS and data injection
+  • X-Frame-Options                   - [Medium] Prevents clickjacking
+  • X-Content-Type-Options            - [Medium] Prevents MIME sniffing
+  • Referrer-Policy                   - [Low] Controls referrer information
+  • Permissions-Policy                - [Low] Controls browser features
+
+Severity Classification:
+  High:   HSTS, CSP (critical security headers)
+  Medium: X-Frame-Options, X-Content-Type-Options
+  Low:    Referrer-Policy, Permissions-Policy
+
+Example Finding:
+  [High] Missing Strict-Transport-Security Header
+  Description: The HSTS header is not present in HTTP responses
+  Recommendation: Add 'Strict-Transport-Security: max-age=31536000; includeSubDomains'
+
+
+6.3 SSL/TLS Analyzer
+─────────────────────
+
+Purpose:
+  Evaluate the SSL/TLS configuration for weaknesses.
+
+What It Checks:
+  • Certificate Details:
+    - Issuer organization
+    - Common Name (CN)
+    - Expiry date
+  
+  • Certificate Issues:
+    - Expired certificates
+    - Self-signed certificates
+  
+  • Protocol Support:
+    - SSLv2 (deprecated, insecure)
+    - SSLv3 (deprecated, insecure)
+    - TLS 1.0 (deprecated, weak)
+
+Severity:
+  High:   Weak protocols detected, expired certificates
+  Info:   Certificate details for documentation
+
+Example Finding:
+  [High] Weak SSL/TLS Protocols Detected
+  Description: SSLv3 and TLS 1.0 are enabled
+  Recommendation: Disable SSLv2, SSLv3, TLS 1.0; enable TLS 1.2 and 1.3
+
+
+6.4 Sensitive Files Discovery
+─────────────────────────────
+
+Purpose:
+  Discover exposed sensitive files and administrative endpoints.
+
+Paths Checked (30+):
+  Critical: /.env, /.git/config, /backup.zip, /wp-config.php
+  High:     /admin, /config.php, /.htaccess, /database.sql
+  Medium:   /robots.txt, /sitemap.xml, /phpinfo.php, /api/
+
+Full list available in Appendix B.
+
+Severity:
+  High:   Configuration files, backups, credentials
+  Medium: Information disclosure, admin panels
+
+Example Finding:
+  [High] Sensitive Path Accessible: /.env
+  Description: The /.env file is publicly accessible
+  Recommendation: Restrict access to /.env or remove if not needed
+
+
+6.5 Parameter Fuzzer
+─────────────────────
+
+Purpose:
+  Test URL parameters for common web vulnerabilities.
+
+SQL Injection Payloads (10):
+  • ' OR '1'='1
+  • ' OR 1=1--
+  • 1' AND '1'='1
+  • 1' AND 1=1--
+  • ' UNION SELECT NULL--
+  • 1; DROP TABLE users--
+  • ' OR '1'='1' --
+  • ' UNION SELECT 1,2,3--
+  • admin'--
+  • 1' ORDER BY 1--
+
+XSS Payloads (10):
+  • <script>alert('XSS')</script>
+  • <img src=x onerror=alert('XSS')>
+  • <svg onload=alert('XSS')>
+  • javascript:alert('XSS')
+  • \"><script>alert('XSS')</script>
+  • '><script>alert('XSS')</script>
+  • <ScRiPt>alert('XSS')</ScRiPt>
+  • <img src=x onerror=alert(1)>
+  • <body onload=alert('XSS')>
+  • <input onfocus=alert('XSS') autofocus>
+
+Detection Method:
+  • SQLi: Response contains SQL error messages
+  • XSS:  Payload is reflected in response
+
+Severity: Critical (both SQLi and XSS)
+
+Example Finding:
+  [Critical] Potential SQL Injection in parameter: id
+  Description: Parameter 'id' may be vulnerable to SQL injection
+  Recommendation: Use parameterized queries and input validation
+
+
+6.6 Open Redirect Checker
+─────────────────────────
+
+Purpose:
+  Detect open redirect vulnerabilities that could be used for phishing.
+
+Parameters Tested:
+  url, next, redirect, redirect_uri, return, return_to, goto, target
+
+Test Method:
+  • Injects external URL (https://evil.com) into each parameter
+  • Checks if response redirects to the external URL
+  • Checks 301, 302, 303, 307, 308 status codes
+
+Severity: High
+
+Example Finding:
+  [High] Open Redirect via url parameter
+  Description: The 'url' parameter allows redirecting to external URLs
+  Recommendation: Validate and whitelist redirect URLs
+
+
+6.7 Report Generator
+─────────────────────
+
+Purpose:
+  Generate professional reports documenting all findings.
+
+Output Formats:
+  1. JSON Format:
+     - File: bugbounty_report_<domain>_<timestamp>.json
+     - Machine-readable
+     - Structured data for programmatic processing
+     - Includes: metadata, summary, all findings with evidence
+  
+  2. TXT Format:
+     - File: bugbounty_report_<domain>_<timestamp>.txt
+     - Human-readable
+     - Formatted with sections and headers
+     - Includes: summary statistics, detailed findings
+
+Report Structure:
+  • Scan Metadata (tool version, target, timestamp)
+  • Summary (count by severity)
+  • Findings (category, severity, title, description, recommendation, evidence)
+
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│ 7. UNDERSTANDING SEVERITY LEVELS                                            │
+├──────────────────────────────────────────────────────────────────────────────┤
+
+Critical:
+  • SQL Injection vulnerabilities
+  • Cross-Site Scripting (XSS) vulnerabilities
+  • Immediate threat to data confidentiality/integrity
+  • Action: Fix immediately
+
+High:
+  • Missing critical security headers (HSTS, CSP)
+  • Weak SSL/TLS protocols
+  • Open redirect vulnerabilities
+  • Exposed sensitive files (credentials, backups)
+  • Action: Fix within 24-48 hours
+
+Medium:
+  • Missing medium-priority security headers
+  • Open ports exposing services
+  • Exposed information disclosure endpoints
+  • Action: Fix within 1 week
+
+Low:
+  • Missing low-priority security headers
+  • Informational findings
+  • Action: Fix during next maintenance cycle
+
+Info:
+  • DNS records
+  • IP addresses
+  • Subdomain lists
+  • Certificate details
+  • Action: Document for reference
+
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│ 8. OUTPUT AND REPORTS                                                       │
+├──────────────────────────────────────────────────────────────────────────────┤
+
+Console Output:
+  Real-time display of scan progress and findings
+  Color-coded severity indicators:
+    [Critical] - Red
+    [High]     - Orange/Yellow
+    [Medium]   - Yellow
+    [Low]      - Blue
+    [Info]     - White/Default
+
+JSON Report Example:
+  {
+    "scan_metadata": {
+      "tool": "Bug Bounty Vulnerability Scanner",
+      "version": "1.0",
+      "target_domain": "example.com",
+      "target_url": "https://example.com",
+      "scan_timestamp": "2024-01-01T12:00:00",
+      "total_findings": 12
+    },
+    "summary": {
+      "critical": 1,
+      "high": 3,
+      "medium": 4,
+      "low": 2,
+      "info": 2
+    },
+    "findings": [
+      {
+        "category": "Security Headers",
+        "severity": "High",
+        "title": "Missing Strict-Transport-Security Header",
+        "description": "The Strict-Transport-Security header is not present...",
+        "recommendation": "Implement the HSTS header...",
+        "evidence": "Response headers: {...}",
+        "timestamp": "2024-01-01T12:00:05"
+      }
+    ]
+  }
+
+TXT Report Example:
+  ================================================================================
+  BUG BOUNTY VULNERABILITY SCANNER REPORT
+  ================================================================================
+  
+  Target Domain: example.com
+  Target URL: https://example.com
+  Scan Timestamp: 2024-01-01T12:00:00
+  Total Findings: 12
+  
+  SUMMARY
+  ----------------------------------------
+  Critical: 1
+  High: 3
+  Medium: 4
+  Low: 2
+  Info: 2
+  
+  FINDINGS
+  ================================================================================
+  
+  Finding #1
+  ----------------------------------------
+  Category: Security Headers
+  Severity: High
+  Title: Missing Strict-Transport-Security Header
+  Description: The Strict-Transport-Security header is not present...
+  Recommendation: Implement the HSTS header...
+  Evidence: Response headers: {...}
+  Timestamp: 2024-01-01T12:00:05
+  ----------------------------------------
+
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│ 9. CUSTOM WORDLISTS                                                         │
+├──────────────────────────────────────────────────────────────────────────────┤
+
+Purpose:
+  Improve subdomain enumeration with targeted wordlists.
+
+Format:
+  • One subdomain per line
+  • No dots or full domain names
+  • Plain text file (.txt)
+
+Example Wordlist (subdomains.txt):
+  www
+  mail
+  admin
+  api
+  dev
+  test
+  staging
+  blog
+  shop
+  app
+  cdn
+  static
+  docs
+  help
+  support
+  portal
+  login
+  dashboard
+  beta
+  demo
+
+Creating Effective Wordlists:
+  • Research common subdomains for similar applications
+  • Include company-specific terms (product names, brands)
+  • Add technology-specific subdomains (jenkins, jira, grafana)
+  • Consider environment names (prod, dev, staging, test)
+  • Include service names (vpn, webmail, ftp, git)
+
+Wordlist Sources:
+  • SecLists (GitHub: danielmiessler/SecLists)
+  • Common subdomain wordlists from bug bounty tools
+  • Custom wordlists based on target research
+
+Default Wordlist:
+  The scanner includes a built-in wordlist of 200+ common subdomains.
+  This is used when no custom wordlist is provided.
+
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│ 10. PERFORMANCE TUNING                                                      │
+├──────────────────────────────────────────────────────────────────────────────┤
+
+Threading:
+  The scanner uses concurrent.futures for parallel execution:
+  • Subdomain enumeration: 20 threads
+  • Port scanning: 10 threads
+  • Sensitive files: 10 threads
+
+Adjusting Thread Count:
+  To modify thread counts, edit the following lines in bugscanner.py:
+  
+  Subdomain enumeration (line ~120):
+    with concurrent.futures.ThreadPoolExecutor(max_workers=20) as executor:
+  
+  Port scanning (line ~170):
+    with concurrent.futures.ThreadPoolExecutor(max_workers=10) as executor:
+  
+  Sensitive files (line ~280):
+    with concurrent.futures.ThreadPoolExecutor(max_workers=10) as executor:
+
+Performance Recommendations:
+  • Increase threads for faster scans (may trigger rate limiting)
+  • Decrease threads for stealthy scans (avoid detection)
+  • Use smaller wordlists for quicker subdomain enumeration
+  • Test on local targets first to calibrate speed
+
+Network Considerations:
+  • DNS resolution speed affects subdomain enumeration
+  • Target server response time affects all HTTP checks
+  • Use reliable DNS servers for consistent results
+
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│ 11. TROUBLESHOOTING                                                         │
+├──────────────────────────────────────────────────────────────────────────────┤
+
+Common Issues and Solutions:
+
+Issue: "ModuleNotFoundError: No module named 'requests'"
+Solution: pip3 install requests
+
+Issue: "ModuleNotFoundError: No module named 'dns'"
+Solution: pip3 install dnspython
+
+Issue: "Connection refused" during port scan
+Cause: Target may be blocking connections or ports are filtered
+Solution: Verify target is online and accessible
+
+Issue: "DNS resolution failed"
+Cause: Network issues or invalid domain
+Solution: Check domain spelling and network connectivity
+
+Issue: "SSL: CERTIFICATE_VERIFY_FAILED"
+Cause: Self-signed or invalid certificate
+Solution: The tool handles this with verify=False, but verify authorization
+
+Issue: Scan is too slow
+Cause: Large wordlist or network latency
+Solution: Use smaller wordlist, increase threads, or check network
+
+Issue: "Too many open files" error
+Cause: System file descriptor limit reached
+Solution: Reduce thread count or increase system limits
+
+Issue: False positives in SQLi/XSS detection
+Cause: Generic error messages or reflected content
+Solution: Manually verify findings before reporting
+
+Issue: Report file not generated
+Cause: Permission issues or disk space
+Solution: Check write permissions and available disk space
+
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│ 12. BEST PRACTICES                                                          │
+├──────────────────────────────────────────────────────────────────────────────┤
+
+Before Scanning:
+  ✓ Obtain explicit written authorization
+  ✓ Verify target is in scope for bug bounty program
+  ✓ Understand scope limitations (what's allowed/forbidden)
+  ✓ Set up a testing methodology and document it
+  ✓ Prepare disclosure and reporting procedures
+
+During Scanning:
+  ✓ Start with passive reconnaissance
+  ✓ Gradually increase scan intensity
+  ✓ Monitor for rate limiting or blocking
+  ✓ Document all findings with evidence
+  ✓ Take screenshots and save response data
+  ✓ Note timestamps and scan parameters
+
+After Scanning:
+  ✓ Verify all findings manually
+  ✓ Eliminate false positives
+  ✓ Prioritize findings by severity
+  ✓ Prepare professional report
+  ✓ Include proof of authorization
+  ✓ Follow responsible disclosure process
+
+Reporting Best Practices:
+  ✓ Include clear, actionable recommendations
+  ✓ Provide reproduction steps
+  ✓ Include evidence (screenshots, request/response data)
+  ✓ Rate severity accurately
+  ✓ Be professional and respectful
+  ✓ Follow the program's reporting template
+
+Ethical Guidelines:
+  ✗ Never test without authorization
+  ✗ Never access or modify data without permission
+  ✗ Never disclose vulnerabilities publicly before fix
+  ✗ Never use findings for personal gain
+  ✓ Always act in good faith
+  ✓ Always protect client data
+
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│ 13. LEGAL AND ETHICAL GUIDELINES                                            │
+├──────────────────────────────────────────────────────────────────────────────┤
+
+Legal Framework:
+  • Computer Fraud and Abuse Act (CFAA) - USA
+  • Computer Misuse Act 1990 - UK
+  • GDPR - EU (data protection implications)
+  • Local cybercrime laws vary by jurisdiction
+
+Authorization Requirements:
+  Must have ONE of the following:
+  • Written contract or agreement
+  • Bug bounty program terms acceptance
+  • Vulnerability disclosure program authorization
+  • Explicit permission from system owner
+
+What Constitutes Authorization:
+  ✓ Signed penetration testing agreement
+  ✓ Bug bounty program rules of engagement
+  ✓ Written email authorization
+  ✓ Legal contract with scope definition
+
+What Does NOT Constitute Authorization:
+  ✗ "I thought it would be okay"
+  ✗ "It's for educational purposes"
+  ✗ "I found it on Shodan"
+  ✗ "Other researchers are testing it"
+
+Consequences of Unauthorized Testing:
+  • Criminal prosecution
+  • Civil lawsuits
+  • Permanent ban from bug bounty platforms
+  • Professional reputation damage
+  • Loss of employment/credentials
+
+Responsible Disclosure:
+  1. Notify the organization privately
+  2. Provide detailed report with evidence
+  3. Allow reasonable time for fix (typically 30-90 days)
+  4. Only disclose publicly after fix is deployed
+  5. Follow bug bounty program disclosure policy
+
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│ 14. FAQ                                                                     │
+├──────────────────────────────────────────────────────────────────────────────┤
+
+Q: Can I scan any website with this tool?
+A: NO. You must have explicit authorization. Only scan targets you own or
+   are listed in active bug bounty programs.
+
+Q: What if I find a vulnerability on a non-authorized site?
+A: Do NOT proceed. Report it through proper channels if applicable, or
+   ignore it. Do not exploit or disclose without authorization.
+
+Q: How long does a scan take?
+A: Depends on wordlist size and target responsiveness. A typical scan
+   with default wordlist takes 5-15 minutes.
+
+Q: Can I scan multiple targets at once?
+A: The tool scans one target at a time. For multiple targets, run
+   multiple instances or create a wrapper script.
+
+Q: Does the tool cause any damage?
+A: No. The tool performs read-only checks and does not modify any data.
+   However, excessive scanning may trigger rate limiting or WAF blocks.
+
+Q: Can I use this for CTF competitions?
+A: Yes, if you have authorization from the CTF organizers.
+
+Q: How accurate are the findings?
+A: The tool is designed to minimize false positives but manual
+   verification is always recommended before reporting.
+
+Q: Can I add more payloads or paths?
+A: Yes. Edit the sqli_payloads, xss_payloads, or sensitive_paths lists
+   in the source code.
+
+Q: Does the tool support HTTPS-only targets?
+A: Yes. The tool automatically uses HTTPS and handles SSL/TLS.
+
+Q: What if the target uses a CDN?
+A: The tool will scan the CDN edge, not the origin server. This is
+   normal and expected behavior.
+
+Q: Can I run this in a Docker container?
+A: Yes. Create a Dockerfile with Python 3.7+ and install dependencies.
+
+Q: How do I update the tool?
+A: Download the latest version from the source repository.
+
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│ 15. APPENDIX A: DEFAULT WORDLIST                                            │
+├──────────────────────────────────────────────────────────────────────────────┤
+
+The scanner includes a built-in wordlist of 200+ common subdomains:
+
+  www, mail, ftp, admin, api, dev, test, staging, blog, shop,
+  app, cdn, static, assets, images, docs, help, support, portal,
+  login, dashboard, beta, demo, vpn, secure, webmail, forum, wiki,
+  git, jenkins, jira, confluence, grafana, prometheus, monitor,
+  status, statuspage, uptime, analytics, tracking, metrics, logs,
+  backup, old, new, stage, prod, production, development, testing,
+  internal, external, public, private, corporate, partner, vendor,
+  customer, client, employee, hr, payroll, finance, accounting,
+  inventory, erp, crm, sales, marketing, service, ticket, helpdesk,
+  desk, chat, livechat, knowledgebase, kb, faq, news, press, media,
+  download, upload, files, file, storage, cloud, drive, sync,
+  calendar, contacts, tasks, notes, notepad, whiteboard, board,
+  trello, asana, basecamp, monday, clickup, notion, slack, teams,
+  discord, zoom, webex, gotomeeting, meet, meeting, webinar, event,
+  events, register, registration, signup, signin, login, logout,
+  forgot, reset, password, account, profile, settings, preferences,
+  config, configuration, setup, install, installer, update, upgrade,
+  patch, fix, hotfix, release, changelog, roadmap, features, pricing,
+  plans, billing, invoice, payment, subscribe, subscription,
+  unsubscribe, cancel, refund, support, contact, about, team,
+  careers, jobs, apply, interview, recruit, hiring, culture, values,
+  mission, privacy, terms, conditions, legal, compliance, gdpr, ccpa,
+  cookies, cookie, policy, policies, security, safe, trust, verify,
+  validation, authenticate, authorize, permissions, roles, groups,
+  users, user, members, member, administrator, moderator, editor,
+  contributor, author, publisher, reviewer, approver
+
+Total: 200+ subdomains
+
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│ 16. APPENDIX B: SENSITIVE PATHS CHECKED                                     │
+├──────────────────────────────────────────────────────────────────────────────┤
+
+Critical Severity:
+  /.env                    - Environment variables (credentials)
+  /backup.zip              - Database/application backup
+  /.git/config             - Git repository configuration
+  /wp-config.php           - WordPress configuration (credentials)
+
+High Severity:
+  /config.php              - Application configuration
+  /.htaccess               - Apache access control
+  /database.sql            - Database dump
+  /dump.sql                - Database dump
+  /phpinfo.php             - PHP configuration info
+  /.aws/credentials        - AWS access keys
+  /admin                   - Admin panel
+  /api/                    - API endpoints
+
+Medium Severity:
+  /robots.txt              - Crawler directives (information disclosure)
+  /.gitignore              - Git ignore file
+  /sitemap.xml             - Site structure
+  /crossdomain.xml         - Flash crossdomain policy
+  /.well-known/security.txt - Security contact info
+  /swagger.json            - API documentation
+  /.DS_Store               - macOS directory metadata
+  /Thumbs.db               - Windows thumbnail cache
+  /error.log               - Error logs
+  /debug.log               - Debug logs
+
+Total: 30 paths checked
+
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│ 17. APPENDIX C: ERROR CODES AND MESSAGES                                    │
+├──────────────────────────────────────────────────────────────────────────────┤
+
+Network Errors:
+  • "Failed to resolve IP: [error]"
+    - DNS resolution failed
+    - Check domain spelling and network
+  
+  • "Failed to fetch headers: [error]"
+    - HTTP request failed
+    - Target may be down or blocking requests
+  
+  • "SSL/TLS analysis failed: [error]"
+    - Certificate verification or connection issue
+    - Target may not support HTTPS
+
+DNS Errors:
+  • "No [type] records found: [error]"
+    - DNS query returned no results
+    - Domain may not have that record type
+
+Port Scan Errors:
+  • "Port [number] connection failed"
+    - Port is closed or filtered
+    - Firewall may be blocking
+
+File Discovery Errors:
+  • "Failed to check [path]: [error]"
+    - HTTP request to path failed
+    - Target may be rate limiting
+
+Parameter Fuzzing Errors:
+  • "Parameter fuzzing failed: [error]"
+    - Unable to fetch initial page
+    - Target may not have parameters
+
+Open Redirect Errors:
+  • "Failed to check [param]: [error]"
+    - HTTP request for redirect test failed
+    - Target may be blocking test requests
+
+General Errors:
+  • "Module not found: [module]"
+    - Required library not installed
+    - Run: pip3 install [module]
+  
+  • "Permission denied"
+    - Cannot write report file
+    - Check directory permissions
+  
+  • "File not found: [path]"
+    - Wordlist file doesn't exist
+    - Check file path and name
+
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│                                                                              │
+│                     END OF USER MANUAL                                       │
+│                                                                              │
+│         For updates and support, visit the project repository.               │
+│                                                                              │
+│         Remember: Authorized testing only. Stay legal, stay ethical.         │
+│                                                                              │
+└──────────────────────────────────────────────────────────────────────────────┘
