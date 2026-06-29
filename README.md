@@ -1,22 +1,22 @@
-<div align="center">
-
 # 🛡️ Bug Bounty Vulnerability Scanner
 
-### Comprehensive Vulnerability Scanner for **Authorized Security Testing** & **Bug Bounty Hunting**
+<div align="center">
 
-<img src="https://img.shields.io/badge/Python-3.7+-blue.svg">
-<img src="https://img.shields.io/badge/License-Educational-green.svg">
-<img src="https://img.shields.io/badge/Security-Bug%20Bounty-red.svg">
-<img src="https://img.shields.io/badge/Status-Stable-success.svg">
-<img src="https://img.shields.io/badge/Maintained-Yes-brightgreen.svg">
+### Professional Vulnerability Scanner for **Authorized Bug Bounty Hunting** & **Security Assessments**
+
+![Python](https://img.shields.io/badge/Python-3.13+-3776AB?style=for-the-badge\&logo=python\&logoColor=white)
+![Version](https://img.shields.io/badge/Version-v3.0.0-success?style=for-the-badge)
+![License](https://img.shields.io/badge/License-MIT-blue?style=for-the-badge)
+![Platform](https://img.shields.io/badge/Platform-Linux%20%7C%20Windows%20%7C%20macOS-orange?style=for-the-badge)
+![Status](https://img.shields.io/badge/Status-Production%20Ready-brightgreen?style=for-the-badge)
 
 ---
 
-**Professional vulnerability scanner built for ethical hackers, penetration testers, and bug bounty hunters.**
+**A modern Python-based vulnerability scanner built for ethical hackers, penetration testers, and bug bounty researchers.**
 
-Designed to automate reconnaissance, identify common web vulnerabilities, analyze security misconfigurations, and generate detailed professional reports.
+Designed with **Python 3.13**, clean architecture, modern networking practices, accurate detection logic, and professional reporting.
 
-> ⚠️ **For Authorized Security Testing Only**
+⚠️ **For Authorized Security Testing Only**
 
 </div>
 
@@ -24,283 +24,117 @@ Designed to automate reconnaissance, identify common web vulnerabilities, analyz
 
 # 📖 Table of Contents
 
-- Overview
-- Features
-- Scanner Workflow
-- Installation
-- Usage
-- Sample Output
-- Report Format
-- Severity Levels
-- Project Structure
-- Proof of Authorization
-- Best Practices
-- Troubleshooting
-- Roadmap
-- Contributing
-- License
-- Disclaimer
+* Overview
+* Features
+* Scanner Workflow
+* Installation
+* Requirements
+* Usage
+* Command-Line Options
+* Example Output
+* Report Formats
+* Architecture
+* Project Structure
+* Performance Improvements
+* Best Practices
+* Legal Disclaimer
+* Roadmap
+* Contributing
+* License
 
 ---
 
 # 🚀 Overview
 
-Bug Bounty Vulnerability Scanner is an automated reconnaissance and vulnerability assessment tool developed specifically for:
+**Bug Bounty Vulnerability Scanner** is a lightweight yet powerful reconnaissance and vulnerability assessment tool developed for:
 
-- Bug Bounty Hunters
-- Penetration Testers
-- Security Researchers
-- Red Team Professionals
-- Ethical Hackers
+* 🛡️ Ethical Hackers
+* 🐞 Bug Bounty Hunters
+* 🔐 Security Researchers
+* 🎯 Penetration Testers
+* 🎓 Cybersecurity Students
 
-The scanner performs multiple phases of security assessment including:
-
-- DNS Enumeration
-- Network Reconnaissance
-- Security Header Analysis
-- SSL/TLS Inspection
-- Sensitive File Discovery
-- Parameter Fuzzing
-- Open Redirect Detection
-- Professional Report Generation
-
-The tool focuses on providing actionable findings while following responsible disclosure practices.
+The scanner automates the early stages of security testing by identifying common security weaknesses while reducing false positives through evidence-based detection.
 
 ---
 
 # ✨ Features
 
-## 🌐 Target Reconnaissance
-
-Automatically performs:
-
-- DNS Record Enumeration
-  - A Records
-  - MX Records
-  - NS Records
-  - TXT Records
-
-- IP Address Resolution
-
-- Subdomain Enumeration
-  - Built-in Wordlist
-  - Custom Wordlist Support
-
-- Common Port Scanning
-
-Supported Ports:
-
-```
-
-21
-22
-80
-443
-8080
-8443
-
-```
-
----
-
-## 🔒 Security Header Analysis
-
-Detects missing or misconfigured HTTP Security Headers.
-
-### Headers Checked
-
-| Header | Severity |
-|---------|-----------|
-| Strict-Transport-Security | High |
-| Content-Security-Policy | High |
-| X-Frame-Options | Medium |
-| X-Content-Type-Options | Medium |
-| Referrer-Policy | Low |
-| Permissions-Policy | Low |
-
----
-
-## 🔐 SSL/TLS Analysis
-
-Performs SSL inspection including:
-
-- Certificate Information
-- Certificate Expiration
-- Self-Signed Certificate Detection
-- Weak Cipher Detection
-- Weak TLS Version Detection
-
-Checks for:
-
-- SSLv2
-- SSLv3
-- TLS 1.0
-
----
-
-## 📂 Sensitive File Discovery
-
-Scans over **30+** common sensitive paths.
-
-Examples include:
-
-```
-
-/robots.txt
-/.git/
-/.env
-/.svn/
-/backup.zip
-/config.php
-/admin/
-/phpinfo.php
-/.DS_Store
-/.htaccess
-
-```
-
-Each accessible resource is verified and categorized based on severity.
-
----
-
-## 💉 Parameter Fuzzing
-
-Automatically tests for common web vulnerabilities.
-
-### SQL Injection
-
-Example Payloads
-
-```
-
-'
-"
-' OR '1'='1
-admin'--
-
-````
-
-### Cross Site Scripting (XSS)
-
-Example Payloads
-
-```html
-<script>alert(1)</script>
-
-"><svg/onload=alert(1)>
-
-"><img src=x onerror=alert(1)>
-````
-
-Response behavior is analyzed for possible indicators of vulnerability.
-
----
-
-## 🔄 Open Redirect Detection
-
-Tests common redirect parameters including:
-
-```
-redirect
-next
-url
-return
-continue
-target
-```
-
-Validates whether external URLs are improperly accepted.
-
----
-
-## 📊 Professional Report Generation
-
-Automatically generates reports in:
-
-* JSON
-* TXT
-
-Each report contains:
-
-* Findings
-* Severity
-* Description
-* Evidence
-* Recommendation
-* Timestamp
-* Scan Metadata
+| Module                       | Description                                                        |
+| ---------------------------- | ------------------------------------------------------------------ |
+| 🌐 Target Recon              | DNS enumeration, IP resolution, subdomain discovery, port scanning |
+| 🛡️ Security Headers         | Detects missing HTTP security headers with severity classification |
+| 🔒 SSL/TLS Analysis          | Certificate inspection, protocol testing, weak TLS detection       |
+| 📂 Sensitive Files Discovery | Searches common sensitive files using content-aware validation     |
+| 💉 Parameter Fuzzer          | Basic SQL Injection & Reflected XSS heuristic detection            |
+| 🔄 Open Redirect Detection   | Tests common redirect parameters with multiple payload encodings   |
+| 📊 Report Generator          | Professional TXT & JSON reports with evidence and recommendations  |
 
 ---
 
 # 🔍 Scanner Workflow
 
-```
-Target
-   │
-   ▼
-DNS Enumeration
-   │
-   ▼
-IP Resolution
-   │
-   ▼
-Subdomain Discovery
-   │
-   ▼
-Port Scan
-   │
-   ▼
-Security Header Scan
-   │
-   ▼
-SSL Analysis
-   │
-   ▼
-Sensitive File Discovery
-   │
-   ▼
-Parameter Fuzzing
-   │
-   ▼
-Open Redirect Testing
-   │
-   ▼
-Professional Report
+```text
+                Target Domain
+                      │
+                      ▼
+          DNS & IP Reconnaissance
+                      │
+                      ▼
+         Subdomain Enumeration
+                      │
+                      ▼
+            Common Port Scanning
+                      │
+                      ▼
+        HTTP Security Header Analysis
+                      │
+                      ▼
+          SSL / TLS Configuration Check
+                      │
+                      ▼
+       Sensitive Files & Endpoint Scan
+                      │
+                      ▼
+          SQLi / XSS Parameter Testing
+                      │
+                      ▼
+        Open Redirect Verification
+                      │
+                      ▼
+      Professional JSON & TXT Reports
 ```
 
 ---
 
-# ⚙️ Installation
+# ⚙️ Requirements
 
-## Requirements
-
-* Python 3.7+
+* Python **3.13+**
 * pip
+* Internet connection
+* Authorization to test the target
 
 ---
+
+# 📦 Installation
 
 ## Clone Repository
 
 ```bash
 git clone https://github.com/yourusername/bugbounty-scanner.git
-
 cd bugbounty-scanner
 ```
-
----
 
 ## Install Dependencies
 
 ```bash
-pip install requests dnspython
+pip install -r requirements.txt
 ```
 
----
-
-## Verify Installation
+## Make Executable (Linux/macOS)
 
 ```bash
-python -c "import requests,dns,ssl,socket,json;print('Installation Successful')"
+chmod +x bugscanner.py
 ```
 
 ---
@@ -310,287 +144,242 @@ python -c "import requests,dns,ssl,socket,json;print('Installation Successful')"
 ## Basic Scan
 
 ```bash
-python bugscanner.py target.com
+python bugscanner.py example.com
 ```
 
----
-
-## Using Custom Wordlist
+## Advanced Scan
 
 ```bash
-python bugscanner.py target.com wordlist.txt
+python bugscanner.py example.com \
+    --wordlist subdomains.txt \
+    --threads 20 \
+    --timeout 30 \
+    --verbose
 ```
 
----
-
-## Linux / macOS
+## Quick Scan
 
 ```bash
-chmod +x bugscanner.py
-
-./bugscanner.py target.com
+python bugscanner.py example.com \
+    --threads 5 \
+    --timeout 10
 ```
 
 ---
 
-# 📷 Example Output
+# ⚡ Command-Line Options
 
-```
-══════════════════════════════════════════════
+| Option          | Description               | Default  |
+| --------------- | ------------------------- | -------- |
+| target          | Target domain             | Required |
+| -w, --wordlist  | Custom subdomain wordlist | Built-in |
+| -t, --threads   | Concurrent threads        | 10       |
+| --timeout       | Request timeout           | 30s      |
+| --no-verify-ssl | Disable SSL verification  | False    |
+| -v, --verbose   | Verbose logging           | False    |
+| --version       | Show scanner version      | -        |
 
- Bug Bounty Vulnerability Scanner v1.0
+---
 
-══════════════════════════════════════════════
+# 📊 Example Output
 
-[+] DNS Enumeration
+```text
+╔══════════════════════════════════════════════════════════════╗
+║      Bug Bounty Vulnerability Scanner v3.0.0                ║
+║          Professional Security Assessment Tool              ║
+╚══════════════════════════════════════════════════════════════╝
 
-✔ A Records Found
+Target : example.com
+Started: 2026-06-29 13:30:41
 
-✔ MX Records Found
+[Phase 1] Reconnaissance
+✔ DNS Enumeration
+✔ IP Resolution
+✔ Subdomain Discovery
+✔ Port Scan
 
-✔ TXT Records Found
+[Phase 2] Security Analysis
+✔ Security Headers
+✔ SSL/TLS Analysis
+✔ Sensitive Files
+✔ Parameter Fuzzing
+✔ Open Redirect Testing
 
-[+] Resolving Target
+========================================================
 
-✔ IP: 93.184.216.34
+Scan Completed Successfully
 
-[+] Subdomain Enumeration
+Duration: 00:02:14
+Findings: 12
 
-✔ www.target.com
-
-✔ mail.target.com
-
-✔ api.target.com
-
-[+] Port Scan
-
-✔ Port 80 Open
-
-✔ Port 443 Open
-
-[+] Security Headers
-
-✘ Missing CSP
-
-✘ Missing HSTS
-
-✔ X-Frame-Options Present
-
-[+] SSL Analysis
-
-✔ Certificate Valid
-
-✘ TLS 1.0 Enabled
-
-[+] Sensitive Files
-
-✔ robots.txt
-
-✘ .env Accessible
-
-[+] Parameter Fuzzing
-
-✔ No SQL Injection Detected
-
-✔ Reflected XSS Detected
-
-[+] Report Generated
-
-bugbounty_report_target.com.json
-
-bugbounty_report_target.com.txt
+Critical : 0
+High     : 3
+Medium   : 2
+Low      : 4
+Info     : 3
 ```
 
 ---
 
-# 📑 Report Structure
+# 📄 Report Formats
 
-## JSON
+The scanner automatically generates:
 
-```json
-{
-  "scan_metadata": {},
-  "summary": {},
-  "findings": []
-}
+```text
+bugbounty_report_<target>_<timestamp>.json
+bugbounty_report_<target>_<timestamp>.txt
 ```
 
-Each finding includes:
+Each report contains:
 
-* Category
-* Severity
-* Title
-* Description
+* Scan Metadata
+* Severity Summary
+* Target Information
 * Evidence
-* Recommendation
-* Timestamp
+* Recommendations
+* Finding IDs
+* Categories
+* Timestamps
 
 ---
 
-# 🚨 Severity Classification
+# 🏗 Architecture
 
-| Severity    | Description                     |
-| ----------- | ------------------------------- |
-| 🔴 Critical | Immediate exploitation possible |
-| 🟠 High     | Serious security issue          |
-| 🟡 Medium   | Moderate risk                   |
-| 🔵 Low      | Minor weakness                  |
-| ⚪ Info      | Informational                   |
+Although distributed as a **single Python file**, the scanner follows a modular architecture.
+
+```text
+BugBountyScanner
+│
+├── Recon Module
+│     ├── DNS
+│     ├── IP Resolution
+│     ├── Subdomains
+│     └── Port Scanner
+│
+├── Security Header Analyzer
+│
+├── SSL/TLS Analyzer
+│
+├── Sensitive File Scanner
+│
+├── Parameter Fuzzer
+│
+├── Open Redirect Checker
+│
+└── Report Generator
+```
 
 ---
 
 # 📁 Project Structure
 
-```
+```text
 bugbounty-scanner/
 
-│
-
 ├── bugscanner.py
-
-├── wordlists/
-
-│ └── subdomains.txt
-
-├── reports/
-
-│ ├── report.json
-
-│ └── report.txt
-
 ├── README.md
-
 ├── requirements.txt
-
-└── LICENSE
+├── LICENSE
+└── reports/
 ```
 
 ---
 
-# 📝 Proof of Authorization
+# 🚀 Performance Highlights
 
-Before scanning any target, ensure you have:
+✔ Python 3.13 Compatible
 
-✅ Written authorization
+✔ No Deprecated SSL APIs
 
-✅ Active Bug Bounty Scope
+✔ Reusable HTTP Session
 
-✅ Program Rules
+✔ Reduced False Positives
 
-✅ Scope Documentation
+✔ ThreadPoolExecutor for Parallel Tasks
 
-✅ Responsible Disclosure Contact
+✔ Content-Aware Analysis
 
-Never scan systems outside your authorization.
+✔ Baseline Response Comparison
+
+✔ Duplicate Finding Prevention
+
+✔ Modern TLS Handshake Validation
+
+✔ Graceful Error Handling
 
 ---
 
 # 💡 Best Practices
 
-* Perform reconnaissance before active testing.
-* Respect target rate limits.
-* Keep detailed logs.
-* Manually verify findings.
-* Follow responsible disclosure policies.
-* Stay within the defined bug bounty scope.
-* Avoid disruptive testing techniques.
-
----
-
-# 🛠 Troubleshooting
-
-## Module Not Found
-
-```bash
-pip install requests dnspython
-```
-
----
-
-## SSL Errors
-
-Ensure the target supports HTTPS and that you are scanning an authorized system.
-
----
-
-## Slow Enumeration
-
-Use a smaller custom wordlist or reduce concurrent threads.
-
----
-
-# 🗺️ Roadmap
-
-Upcoming features include:
-
-* [ ] Multi-threaded crawler
-* [ ] JavaScript endpoint discovery
-* [ ] Directory brute forcing
-* [ ] CVE fingerprinting
-* [ ] Technology detection
-* [ ] WAF detection
-* [ ] Screenshot capture
-* [ ] HTML report generation
-* [ ] PDF report export
-* [ ] Nmap integration
-* [ ] Shodan integration
-* [ ] Censys integration
-* [ ] GitHub secret detection
-* [ ] Wayback Machine enumeration
-* [ ] Passive reconnaissance mode
-* [ ] API Security Testing
-* [ ] GraphQL Scanner
-
----
-
-# 🤝 Contributing
-
-Contributions are welcome!
-
-Please ensure:
-
-* Code follows ethical standards.
-* Features are documented.
-* Tests are included.
-* Pull Requests remain focused.
-* Existing coding style is maintained.
-
----
-
-# 📜 License
-
-This project is provided for:
-
-* Educational Purposes
-* Authorized Penetration Testing
-* Responsible Bug Bounty Research
-
-Refer to the LICENSE file for details.
+* Always obtain written authorization before testing.
+* Respect bug bounty program scope.
+* Avoid excessive request rates.
+* Manually verify all automated findings.
+* Include proof of authorization with reports.
+* Follow responsible disclosure practices.
 
 ---
 
 # ⚠️ Legal Disclaimer
 
-> **This tool is intended exclusively for authorized security testing and educational purposes.**
+> **This project is intended exclusively for educational purposes and authorized security testing.**
 
-By using this software you agree that:
+By using this software, you agree that:
 
-* You will only scan systems you own or have explicit written permission to test.
+* You own the target or have explicit written permission to test it.
+* The target is within the scope of an active bug bounty program or a controlled laboratory environment (e.g., DVWA or OWASP Juice Shop).
 * You will comply with all applicable laws and regulations.
 * You accept full responsibility for your actions.
-* The developers assume no liability for misuse or damage caused by this software.
 
-Unauthorized scanning of systems may be illegal and could result in civil or criminal penalties.
+**The authors assume no liability for misuse, unauthorized testing, or damages resulting from the use of this software.**
+
+---
+
+# 🗺 Roadmap
+
+* [ ] HTML Report Export
+* [ ] PDF Report Export
+* [ ] Technology Fingerprinting
+* [ ] Robots.txt Parser
+* [ ] Sitemap.xml Parsing
+* [ ] Crawler Integration
+* [ ] JavaScript Endpoint Discovery
+* [ ] Passive Reconnaissance Mode
+* [ ] GitHub Actions CI
+* [ ] Unit Tests
+
+---
+
+# 🤝 Contributing
+
+Contributions are welcome.
+
+Before submitting a pull request:
+
+* Follow PEP 8
+* Write clean, documented code
+* Preserve assignment compatibility
+* Include meaningful commit messages
+* Test your changes thoroughly
+
+---
+
+# 📜 License
+
+This project is released under the **MIT License**.
+
+See the `LICENSE` file for complete details.
 
 ---
 
 <div align="center">
 
-## ⭐ If this project helped you, consider giving it a star!
+## ⭐ Support the Project
 
-**Happy Hunting • Stay Ethical • Hack Responsibly**
+If you found this project useful, consider giving it a ⭐ on GitHub.
 
-🛡️ Built for the Bug Bounty Community
+### 🛡️ Hack Responsibly • Stay Ethical • Secure the Internet
+
+**Built with ❤️ for the Cybersecurity Community**
 
 </div>
-
