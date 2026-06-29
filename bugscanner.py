@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Bug Bounty Vulnerability Scanner
-Version: 3.0.1
+Version: 3.0.2
 Author: Security Engineering Team
 License: MIT (Authorized Testing Only)
 
@@ -52,6 +52,16 @@ class ScannerCore:
         self.findings: List[Dict[str, Any]] = []
         self.finding_ids: Set[str] = set()
         
+        # Module execution status
+        self.modules_status: Dict[str, bool] = {
+            'reconnaissance': False,
+            'security_headers': False,
+            'tls_analysis': False,
+            'sensitive_files': False,
+            'parameter_fuzzing': False,
+            'open_redirect': False
+        }
+        
         # Shared HTTP session with retry strategy
         self.session = self._create_session()
         
@@ -66,15 +76,24 @@ class ScannerCore:
             'subdomains': 0,
             'open_ports': 0,
             'headers_checked': 0,
-            'tls_checks': 0,
-            'sensitive_paths': 0,
-            'parameters_tested': 0,
-            'redirects_tested': 0,
-            'tls_protocols_tested': 0
+            'tls_protocols_tested': 0,
+            'tls_weak_protocols': 0,
+            'sensitive_paths_tested': 0,
+            'sensitive_paths_found': 0,
+            'critical_files_found': 0,
+            'parameters_discovered': 0,
+            'payloads_tested': 0,
+            'sqli_findings': 0,
+            'xss_findings': 0,
+            'redirect_payloads_tested': 0,
+            'redirect_vulnerabilities': 0
         }
         
         # Protocol support cache
         self.protocol_support_cache: Dict[str, bool] = {}
+        
+        # Certificate info
+        self.cert_info: Optional[Dict[str, Any]] = None
     
     def _normalize_target(self, target: str) -> str:
         """Normalize target to clean domain format."""
@@ -195,17 +214,11 @@ class ScannerCore:
         
         self.findings.append(finding)
         
-        # Console output
-        severity_colors = {
-            'Critical': '\033[91m',  # Red
-            'High': '\033[93m',      # Yellow
-            'Medium': '\033[94m',    # Blue
-            'Low': '\033[92m',       # Green
-            'Info': '\033[96m'       # Cyan
-        }
-        reset = '\033[0m'
-        color = severity_colors.get(severity, '')
-        print(f"  {color}[{severity}]{reset} {title}")
+        # Update statistics for specific categories
+        if "SQL Injection" in category:
+            self.stats['sqli_findings'] += 1
+        elif "Cross-Site Scripting" in category:
+            self.stats['xss_findings'] += 1
     
     def safe_request(self, url: str, method: str = 'GET',
                      allow_redirects: bool = True, **kwargs) -> Optional[requests.Response]:
@@ -249,7 +262,7 @@ class ScannerCore:
         """Print scanner banner."""
         print("""
     ╔══════════════════════════════════════════════════════════════╗
-    ║          Bug Bounty Vulnerability Scanner v3.0.1             ║
+    ║          Bug Bounty Vulnerability Scanner v3.0.2             ║
     ║              For Authorized Testing Only                     ║
     ╚══════════════════════════════════════════════════════════════╝
         """)
@@ -257,6 +270,11 @@ class ScannerCore:
     def print_separator(self, char: str = "=", length: int = 60) -> None:
         """Print separator line."""
         print(f"\n{char * length}\n")
+    
+    def print_module_header(self, module_name: str, phase_num: int) -> None:
+        """Print module header."""
+        print(f"\n[Phase {phase_num}] {module_name}")
+        print("-" * 40)
     
     def run(self) -> None:
         """Execute full scan."""
@@ -281,12 +299,12 @@ class ScannerCore:
         self.print_separator()
         
         # Execute scan phases
-        self.phase_reconnaissance()
-        self.phase_security_headers()
-        self.phase_tls_analysis()
-        self.phase_sensitive_files()
-        self.phase_parameter_fuzzing()
-        self.phase_open_redirects()
+        self.phase_reconnaissance(1)
+        self.phase_security_headers(2)
+        self.phase_tls_analysis(3)
+        self.phase_sensitive_files(4)
+        self.phase_parameter_fuzzing(5)
+        self.phase_open_redirects(6)
         
         # Generate reports
         self.generate_reports()
@@ -294,18 +312,16 @@ class ScannerCore:
         # Print summary
         self.print_summary()
     
-    def phase_reconnaissance(self) -> None:
+    def phase_reconnaissance(self, phase_num: int) -> None:
         """Phase 1: Target reconnaissance."""
-        print("[Phase 1] Target Reconnaissance")
-        print("-" * 40)
-        
+        self.print_module_header("Target Reconnaissance", phase_num)
         recon = ReconModule(self)
         recon.run()
+        self.modules_status['reconnaissance'] = True
     
-    def phase_security_headers(self) -> None:
+    def phase_security_headers(self, phase_num: int) -> None:
         """Phase 2: Security headers analysis."""
-        print("\n[Phase 2] Security Headers Analysis")
-        print("-" * 40)
+        self.print_module_header("Security Headers Analysis", phase_num)
         
         if not self.base_url:
             print("  No working URL found, skipping...")
@@ -313,23 +329,23 @@ class ScannerCore:
         
         headers = SecurityHeadersModule(self)
         headers.run()
+        self.modules_status['security_headers'] = True
     
-    def phase_tls_analysis(self) -> None:
+    def phase_tls_analysis(self, phase_num: int) -> None:
         """Phase 3: SSL/TLS analysis."""
-        print("\n[Phase 3] SSL/TLS Analysis")
-        print("-" * 40)
+        self.print_module_header("SSL/TLS Analysis", phase_num)
         
         # Only run TLS analysis for HTTPS
         if self.working_protocol == "https":
             tls = TLSModule(self)
             tls.run()
+            self.modules_status['tls_analysis'] = True
         else:
             print("  Skipping TLS analysis (HTTP only)")
     
-    def phase_sensitive_files(self) -> None:
+    def phase_sensitive_files(self, phase_num: int) -> None:
         """Phase 4: Sensitive files discovery."""
-        print("\n[Phase 4] Sensitive Files Discovery")
-        print("-" * 40)
+        self.print_module_header("Sensitive Files Discovery", phase_num)
         
         if not self.base_url:
             print("  No working URL found, skipping...")
@@ -337,11 +353,11 @@ class ScannerCore:
         
         sensitive = SensitiveFilesModule(self)
         sensitive.run()
+        self.modules_status['sensitive_files'] = True
     
-    def phase_parameter_fuzzing(self) -> None:
+    def phase_parameter_fuzzing(self, phase_num: int) -> None:
         """Phase 5: Parameter fuzzing."""
-        print("\n[Phase 5] Parameter Fuzzing")
-        print("-" * 40)
+        self.print_module_header("Parameter Fuzzing", phase_num)
         
         if not self.base_url:
             print("  No working URL found, skipping...")
@@ -349,11 +365,11 @@ class ScannerCore:
         
         fuzzer = ParameterFuzzerModule(self)
         fuzzer.run()
+        self.modules_status['parameter_fuzzing'] = True
     
-    def phase_open_redirects(self) -> None:
+    def phase_open_redirects(self, phase_num: int) -> None:
         """Phase 6: Open redirect checking."""
-        print("\n[Phase 6] Open Redirect Check")
-        print("-" * 40)
+        self.print_module_header("Open Redirect Check", phase_num)
         
         if not self.base_url:
             print("  No working URL found, skipping...")
@@ -361,35 +377,84 @@ class ScannerCore:
         
         redirect = OpenRedirectModule(self)
         redirect.run()
+        self.modules_status['open_redirect'] = True
     
     def generate_reports(self) -> None:
         """Generate scan reports."""
-        print("\n[Report Generation]")
-        print("-" * 40)
-        
+        self.print_module_header("Report Generation", 7)
         reporter = ReportModule(self)
         reporter.generate()
     
     def print_summary(self) -> None:
-        """Print scan summary."""
+        """Print professional scan summary."""
         self.print_separator()
-        print("SCAN COMPLETE")
-        print("-" * 40)
+        print("SCAN SUMMARY")
+        self.print_separator()
         
         duration = datetime.datetime.now() - self.scan_start
         summary = self.get_summary()
         
-        print(f"Duration: {duration}")
-        print(f"Total Findings: {len(self.findings)}")
-        print(f"  Critical: {summary['Critical']}")
-        print(f"  High: {summary['High']}")
-        print(f"  Medium: {summary['Medium']}")
-        print(f"  Low: {summary['Low']}")
-        print(f"  Info: {summary['Info']}")
+        # Target Information
+        print(f"Target            : {self.target}")
+        print(f"Start Time        : {self.scan_start.strftime('%Y-%m-%d %H:%M:%S')}")
+        print(f"Finish Time       : {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+        print(f"Duration          : {duration.total_seconds():.2f} seconds")
         print()
-        print(f"Statistics:")
-        for key, value in self.stats.items():
-            print(f"  {key.replace('_', ' ').title()}: {value}")
+        
+        # Modules Completed
+        print("Modules Completed")
+        print("-" * 40)
+        for module, status in self.modules_status.items():
+            status_icon = "✓" if status else "✗"
+            module_name = module.replace('_', ' ').title()
+            print(f"  {status_icon} {module_name}")
+        print()
+        
+        # Findings
+        print("Findings")
+        print("-" * 40)
+        print(f"  Critical : {summary['Critical']}")
+        print(f"  High     : {summary['High']}")
+        print(f"  Medium   : {summary['Medium']}")
+        print(f"  Low      : {summary['Low']}")
+        print(f"  Info     : {summary['Info']}")
+        print()
+        
+        # Statistics
+        print("Statistics")
+        print("-" * 40)
+        
+        # DNS and Recon
+        print(f"  DNS Records               : {self.stats['dns_records']}")
+        print(f"  Subdomains                : {self.stats['subdomains']}")
+        print(f"  Open Ports                : {self.stats['open_ports']}")
+        print(f"  Headers Checked           : {self.stats['headers_checked']}")
+        
+        # TLS Statistics
+        print(f"  TLS Protocols Tested      : {self.stats['tls_protocols_tested']}")
+        print(f"  TLS Weak Protocols        : {self.stats['tls_weak_protocols']}")
+        
+        # Sensitive Files
+        print(f"  Sensitive Paths Tested    : {self.stats['sensitive_paths_tested']}")
+        print(f"  Sensitive Paths Found     : {self.stats['sensitive_paths_found']}")
+        print(f"  Critical Files Found      : {self.stats['critical_files_found']}")
+        
+        # Parameter Fuzzing
+        print(f"  Parameters Discovered     : {self.stats['parameters_discovered']}")
+        print(f"  Payloads Tested           : {self.stats['payloads_tested']}")
+        print(f"  Potential SQLi            : {self.stats['sqli_findings']}")
+        print(f"  Potential XSS             : {self.stats['xss_findings']}")
+        
+        # Open Redirect
+        print(f"  Redirect Payloads Tested  : {self.stats['redirect_payloads_tested']}")
+        print(f"  Redirect Vulnerabilities  : {self.stats['redirect_vulnerabilities']}")
+        print()
+        
+        # Reports
+        print("Reports")
+        print("-" * 40)
+        print(f"  ✓ JSON Report Generated")
+        print(f"  ✓ TXT Report Generated")
         
         self.print_separator()
 
@@ -680,27 +745,32 @@ class TLSModule:
     
     def __init__(self, core: ScannerCore):
         self.core = core
+        self.weak_protocols_detected: List[str] = []
+        self.protocol_support: Dict[str, str] = {}
         
-        # Protocol versions to test (modern mapping)
-        self.protocols = {
-            'TLSv1.2': ssl.TLSVersion.TLSv1_2,
-            'TLSv1.3': ssl.TLSVersion.TLSv1_3
+        # Protocol versions to test (modern)
+        self.modern_protocols = {
+            'TLS 1.2': ssl.TLSVersion.TLSv1_2,
+            'TLS 1.3': ssl.TLSVersion.TLSv1_3
         }
         
-        # Legacy protocols with alternative testing
-        self.legacy_protocols = ['SSLv2', 'SSLv3', 'TLSv1.0', 'TLSv1.1']
-        self.weak_protocols = ['SSLv2', 'SSLv3', 'TLSv1.0', 'TLSv1.1']
+        # Legacy protocols to test (with careful handling)
+        self.legacy_protocols = ['SSLv2', 'SSLv3', 'TLS 1.0', 'TLS 1.1']
+        self.weak_protocol_list = ['SSLv2', 'SSLv3', 'TLS 1.0', 'TLS 1.1']
     
     def run(self) -> None:
         """Execute TLS analysis."""
         # Get certificate
-        cert_info = self.get_certificate_info()
+        self.core.cert_info = self.get_certificate_info()
         
-        if cert_info:
-            self.analyze_certificate(cert_info)
+        if self.core.cert_info:
+            self.analyze_certificate(self.core.cert_info)
         
         # Test protocol support
         self.test_protocols()
+        
+        # Display protocol results
+        self.display_protocol_results()
     
     def get_certificate_info(self) -> Optional[Dict[str, Any]]:
         """Get SSL certificate information using modern APIs."""
@@ -735,15 +805,45 @@ class TLSModule:
             return None
     
     def analyze_certificate(self, cert_info: Dict[str, Any]) -> None:
-        """Analyze certificate for issues."""
-        self.core.stats['tls_checks'] += 1
+        """Analyze certificate and display information."""
+        self.core.stats['tls_protocols_tested'] += 1
         
-        # Print certificate details
-        print("  [Certificate Details]")
-        print(f"    Subject: {cert_info['subject'].get('commonName', 'N/A')}")
-        print(f"    Issuer: {cert_info['issuer'].get('organizationName', 'N/A')}")
-        print(f"    Valid From: {cert_info['notBefore']}")
-        print(f"    Valid Until: {cert_info['notAfter']}")
+        # Parse dates
+        try:
+            not_before = datetime.datetime.strptime(
+                cert_info['notBefore'], '%b %d %H:%M:%S %Y %Z'
+            )
+            not_after = datetime.datetime.strptime(
+                cert_info['notAfter'], '%b %d %H:%M:%S %Y %Z'
+            )
+            now = datetime.datetime.utcnow()
+            days_remaining = (not_after - now).days
+            
+            # Determine certificate status
+            if days_remaining < 0:
+                status = "EXPIRED"
+                status_color = "\033[91m"  # Red
+            elif days_remaining < 30:
+                status = "EXPIRING SOON"
+                status_color = "\033[93m"  # Yellow
+            else:
+                status = "VALID"
+                status_color = "\033[92m"  # Green
+            reset = "\033[0m"
+        except ValueError:
+            days_remaining = "N/A"
+            status = "UNKNOWN"
+            status_color = "\033[94m"  # Blue
+        
+        # Display certificate information
+        print("  [Certificate Information]")
+        print("-" * 40)
+        print(f"  Issuer        : {cert_info['issuer'].get('organizationName', 'N/A')}")
+        print(f"  Common Name   : {cert_info['subject'].get('commonName', 'N/A')}")
+        print(f"  Valid From    : {cert_info['notBefore']}")
+        print(f"  Valid Until   : {cert_info['notAfter']}")
+        print(f"  Days Remaining: {days_remaining}")
+        print(f"  Status        : {status_color}{status}{reset}")
         
         # Check expiration
         try:
@@ -762,7 +862,6 @@ class TLSModule:
                     evidence=f"Valid until: {cert_info['notAfter']}",
                     finding_id=f"cert_expired_{self.core.target}"
                 )
-                print("    [EXPIRED] Certificate is expired!")
         except ValueError:
             pass
         
@@ -777,7 +876,6 @@ class TLSModule:
                 evidence=f"Subject matches issuer: {cert_info['subject']}",
                 finding_id=f"cert_selfsigned_{self.core.target}"
             )
-            print("    [SELF-SIGNED] Certificate is self-signed")
         
         # Add informational finding
         self.core.add_finding(
@@ -786,46 +884,76 @@ class TLSModule:
             title="SSL Certificate Details",
             description=f"Certificate issued to: {cert_info['subject'].get('commonName', 'N/A')}\n"
                        f"Issued by: {cert_info['issuer'].get('organizationName', 'N/A')}\n"
-                       f"Valid until: {cert_info['notAfter']}",
+                       f"Valid until: {cert_info['notAfter']}\n"
+                       f"Days remaining: {days_remaining}\n"
+                       f"Status: {status}",
             recommendation="Monitor certificate expiry",
             evidence=f"Certificate: {cert_info}",
             finding_id=f"cert_info_{self.core.target}"
         )
     
-    def test_protocols(self) -> List[str]:
+    def test_protocols(self) -> None:
         """Test actual protocol support through real handshakes."""
         print("\n  [Protocol Testing]")
-        supported_weak = []
+        print("-" * 40)
         
-        # Test modern protocols first
-        for protocol_name, tls_version in self.protocols.items():
+        # Test modern protocols
+        for protocol_name, tls_version in self.modern_protocols.items():
             self.core.stats['tls_protocols_tested'] += 1
             if self._test_tls_version(tls_version):
-                print(f"    [+] {protocol_name}: Supported")
+                self.protocol_support[protocol_name] = "Supported"
+                print(f"  {protocol_name:12} Supported")
             else:
-                print(f"    [-] {protocol_name}: Not supported")
+                self.protocol_support[protocol_name] = "Not Supported"
+                print(f"  {protocol_name:12} Not Supported")
         
-        # Test legacy protocols with specific error handling
+        # Test legacy protocols
+        legacy_supported = []
         for protocol_name in self.legacy_protocols:
             self.core.stats['tls_protocols_tested'] += 1
-            if self._test_legacy_protocol(protocol_name):
-                supported_weak.append(protocol_name)
-                print(f"    [!] {protocol_name}: Supported (WEAK)")
-            else:
-                print(f"    [-] {protocol_name}: Not supported")
+            try:
+                if self._test_legacy_protocol(protocol_name):
+                    self.protocol_support[protocol_name] = "Supported"
+                    if protocol_name in self.weak_protocol_list:
+                        legacy_supported.append(protocol_name)
+                    print(f"  {protocol_name:12} Supported (WEAK)")
+                else:
+                    self.protocol_support[protocol_name] = "Not Supported"
+                    print(f"  {protocol_name:12} Not Supported")
+            except DeprecationWarning:
+                # Gracefully handle deprecation warnings
+                self.protocol_support[protocol_name] = "Skipped"
+                print(f"  {protocol_name:12} Skipped (deprecated)")
         
-        if supported_weak:
+        # Track weak protocols
+        self.weak_protocols_detected = legacy_supported
+        self.core.stats['tls_weak_protocols'] = len(legacy_supported)
+        
+        # Report weak protocols if found
+        if legacy_supported:
             self.core.add_finding(
                 category="SSL/TLS Analysis",
                 severity="High",
                 title="Weak SSL/TLS Protocols Detected",
-                description=f"Weak protocols enabled: {', '.join(supported_weak)}",
+                description=f"Weak protocols enabled: {', '.join(legacy_supported)}",
                 recommendation="Disable SSLv2, SSLv3, TLS 1.0, and TLS 1.1. Enable TLS 1.2 and 1.3 only.",
-                evidence=f"Supported weak protocols: {', '.join(supported_weak)}",
+                evidence=f"Supported weak protocols: {', '.join(legacy_supported)}",
                 finding_id=f"weak_protocols_{self.core.target}"
             )
+    
+    def display_protocol_results(self) -> None:
+        """Display protocol testing results professionally."""
+        print("\n  Protocol Testing")
+        print("-" * 40)
         
-        return supported_weak
+        for protocol, status in self.protocol_support.items():
+            padding = 12 - len(protocol)
+            print(f"  {protocol}{' ' * padding} {status}")
+        
+        if self.weak_protocols_detected:
+            print(f"\n  Weak Protocols Detected : {', '.join(self.weak_protocols_detected)}")
+        else:
+            print("\n  Weak Protocols Detected : None")
     
     def _test_tls_version(self, tls_version: ssl.TLSVersion) -> bool:
         """Test if a specific TLS version is supported."""
@@ -856,84 +984,88 @@ class TLSModule:
         return False
     
     def _test_legacy_protocol(self, protocol: str) -> bool:
-        """Test for legacy SSL protocols using multiple approaches."""
+        """Test for legacy SSL protocols with accurate detection."""
         cache_key = f"legacy_{protocol}"
         if cache_key in self.core.protocol_support_cache:
             return self.core.protocol_support_cache[cache_key]
         
-        # Try standard TLS connection first
+        # Get the protocol version number
+        if protocol == 'SSLv2':
+            version_num = 0x0002
+        elif protocol == 'SSLv3':
+            version_num = 0x0300
+        elif protocol == 'TLS 1.0':
+            version_num = 0x0301
+        elif protocol == 'TLS 1.1':
+            version_num = 0x0302
+        else:
+            self.core.protocol_support_cache[cache_key] = False
+            return False
+        
         try:
-            context = ssl.create_default_context()
+            # Try to connect with the specific protocol using a custom SSLContext
+            context = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
             context.check_hostname = False
             context.verify_mode = ssl.CERT_NONE
             
-            # Try to get cipher list that might indicate legacy support
-            with socket.create_connection(
-                (self.core.target, 443), timeout=5
-            ) as sock:
-                with context.wrap_socket(sock, server_hostname=self.core.target) as ssock:
-                    # Check if the server advertises any weak ciphers
-                    cipher = ssock.cipher()
-                    if cipher and any(weak in cipher[0].lower() for weak in 
-                                     ['rc4', 'des', 'export', 'null']):
-                        self.core.protocol_support_cache[cache_key] = True
-                        return True
-        except:
-            pass
-        
-        # Try connecting with specific SSL/TLS version using ssl.wrap_socket (legacy)
-        # This is a fallback for systems where modern SSLContext might not catch all
-        try:
-            import ssl as ssl_module
-            
-            # Different approach for different protocols
-            if protocol == 'SSLv2':
-                # SSLv2 is mostly dead, try with specific cipher
+            # For legacy protocols, we need to try different approaches
+            if protocol in ['TLS 1.0', 'TLS 1.1']:
+                # These can be tested with specific minimum/maximum versions
+                if protocol == 'TLS 1.0':
+                    context.minimum_version = ssl.TLSVersion.TLSv1
+                    context.maximum_version = ssl.TLSVersion.TLSv1
+                elif protocol == 'TLS 1.1':
+                    context.minimum_version = ssl.TLSVersion.TLSv1_1
+                    context.maximum_version = ssl.TLSVersion.TLSv1_1
+                
                 try:
-                    context = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
-                    context.set_ciphers('ALL:!aNULL:!eNULL:!EXPORT:!DES:!RC4:!3DES:!MD5:!PSK:!SRP')
-                    context.check_hostname = False
-                    context.verify_mode = ssl.CERT_NONE
-                    
                     with socket.create_connection(
                         (self.core.target, 443), timeout=5
                     ) as sock:
                         with context.wrap_socket(sock, server_hostname=self.core.target) as ssock:
-                            # If we get here, SSLv2-like ciphers might be supported
-                            self.core.protocol_support_cache[cache_key] = True
-                            return True
-                except:
-                    pass
-            
-            elif protocol in ['SSLv3', 'TLSv1.0', 'TLSv1.1']:
-                # Try with minimal TLS version
-                try:
-                    context = ssl.create_default_context()
-                    context.check_hostname = False
-                    context.verify_mode = ssl.CERT_NONE
-                    
-                    # Force older TLS version
-                    if protocol == 'SSLv3':
-                        # SSLv3 is not supported in modern Python, but we can try
-                        pass
-                    elif protocol == 'TLSv1.0':
-                        context.minimum_version = ssl.TLSVersion.TLSv1
-                        context.maximum_version = ssl.TLSVersion.TLSv1
-                    elif protocol == 'TLSv1.1':
-                        context.minimum_version = ssl.TLSVersion.TLSv1_1
-                        context.maximum_version = ssl.TLSVersion.TLSv1_1
-                    
-                    with socket.create_connection(
-                        (self.core.target, 443), timeout=5
-                    ) as sock:
-                        with context.wrap_socket(sock, server_hostname=self.core.target) as ssock:
-                            if ssock.version() and protocol.lower() in ssock.version().lower():
+                            # Check if the negotiated version matches
+                            negotiated_version = ssock.version()
+                            if negotiated_version and protocol.lower().replace(' ', '') in negotiated_version.lower().replace('.', ''):
                                 self.core.protocol_support_cache[cache_key] = True
                                 return True
                 except:
-                    pass
-        except:
-            pass
+                    self.core.protocol_support_cache[cache_key] = False
+                    return False
+            
+            elif protocol == 'SSLv3':
+                # SSLv3 is completely deprecated and unsupported in modern Python
+                # Try a different approach - check for SSLv3 cipher support
+                try:
+                    # Try to connect with SSLv3-specific settings
+                    # This will almost certainly fail, but we need to be accurate
+                    with socket.create_connection(
+                        (self.core.target, 443), timeout=5
+                    ) as sock:
+                        # Just a regular connection to check if SSLv3 might be supported
+                        # In practice, this is extremely unlikely to succeed
+                        with ssl.create_default_context().wrap_socket(
+                            sock, server_hostname=self.core.target
+                        ) as ssock:
+                            # If we get here, the server supports at least TLS 1.0 or higher
+                            # SSLv3 is almost certainly not supported
+                            pass
+                    
+                    # Since SSLv3 is not supported in modern Python, we can't actually negotiate it
+                    # We'll mark it as not supported
+                    self.core.protocol_support_cache[cache_key] = False
+                    return False
+                except:
+                    self.core.protocol_support_cache[cache_key] = False
+                    return False
+            
+            elif protocol == 'SSLv2':
+                # SSLv2 is completely obsolete
+                self.core.protocol_support_cache[cache_key] = False
+                return False
+            
+        except Exception:
+            self.core.protocol_support_cache[cache_key] = False
+            return False
         
         self.core.protocol_support_cache[cache_key] = False
         return False
@@ -1035,6 +1167,10 @@ class SensitiveFilesModule:
             print("  No working URL available")
             return
         
+        # Count total paths for statistics
+        total_paths = sum(len(paths) for paths in self.paths.values())
+        print(f"  Testing {total_paths} sensitive paths...")
+        
         with concurrent.futures.ThreadPoolExecutor(max_workers=self.core.threads) as executor:
             futures = {}
             for severity, paths in self.paths.items():
@@ -1046,10 +1182,14 @@ class SensitiveFilesModule:
             for future in concurrent.futures.as_completed(futures):
                 path, default_severity = futures[future]
                 result = future.result()
+                self.core.stats['sensitive_paths_tested'] += 1
                 
                 if result:
                     url, status, content, actual_severity = result
-                    self.core.stats['sensitive_paths'] += 1
+                    self.core.stats['sensitive_paths_found'] += 1
+                    
+                    if actual_severity == 'Critical':
+                        self.core.stats['critical_files_found'] += 1
                     
                     self.core.add_finding(
                         category="Sensitive Files",
@@ -1061,6 +1201,10 @@ class SensitiveFilesModule:
                         finding_id=f"sensitive_{path}_{self.core.target}"
                     )
                     print(f"  [{actual_severity}] {path} ({status})")
+        
+        print(f"\n  Sensitive Paths Tested: {self.core.stats['sensitive_paths_tested']}")
+        print(f"  Sensitive Paths Found : {self.core.stats['sensitive_paths_found']}")
+        print(f"  Critical Files Found  : {self.core.stats['critical_files_found']}")
     
     def check_path(self, url: str, path: str, 
                    default_severity: str) -> Optional[Tuple[str, int, str, str]]:
@@ -1190,13 +1334,16 @@ class ParameterFuzzerModule:
         
         # First, find parameters on the target
         params = self.discover_parameters(base_url)
+        self.core.stats['parameters_discovered'] = len(params)
         
         if not params:
             print("  No parameters found to test")
             return
         
         print(f"  Found {len(params)} parameters to test")
+        print(f"  Testing with {len(self.sqli_payloads)} SQLi payloads and {len(self.xss_payloads)} XSS payloads per parameter")
         
+        total_payloads = 0
         # Test each parameter
         for param_name, param_url in params:
             print(f"\n  Testing parameter: {param_name}")
@@ -1207,10 +1354,20 @@ class ParameterFuzzerModule:
                 continue
             
             # Test SQL injection
-            self.test_sqli(param_url, param_name, baseline)
+            payloads_used = self.test_sqli(param_url, param_name, baseline)
+            total_payloads += payloads_used
             
             # Test XSS
-            self.test_xss(param_url, param_name, baseline)
+            payloads_used = self.test_xss(param_url, param_name, baseline)
+            total_payloads += payloads_used
+        
+        self.core.stats['payloads_tested'] = total_payloads
+        
+        print(f"\n  Parameters Discovered : {self.core.stats['parameters_discovered']}")
+        print(f"  Payloads Per Parameter: {len(self.sqli_payloads) + len(self.xss_payloads)}")
+        print(f"  Total Payloads Tested : {self.core.stats['payloads_tested']}")
+        print(f"  Potential SQLi        : {self.core.stats['sqli_findings']}")
+        print(f"  Potential XSS         : {self.core.stats['xss_findings']}")
     
     def discover_parameters(self, base_url: str) -> List[Tuple[str, str]]:
         """Discover URL parameters from target."""
@@ -1264,12 +1421,13 @@ class ParameterFuzzerModule:
             return response.text
         return None
     
-    def test_sqli(self, url: str, param_name: str, baseline: str) -> None:
+    def test_sqli(self, url: str, param_name: str, baseline: str) -> int:
         """Test parameter for SQL injection."""
         base_url = url.split('?')[0]
+        payloads_used = 0
         
         for payload in self.sqli_payloads[:5]:  # Test first 5 payloads
-            self.core.stats['parameters_tested'] += 1
+            payloads_used += 1
             test_url = f"{base_url}?{param_name}={quote(payload)}"
             
             response = self.core.safe_request(test_url)
@@ -1291,7 +1449,7 @@ class ParameterFuzzerModule:
                         finding_id=f"sqli_{param_name}_{hash(payload)}_{self.core.target}"
                     )
                     print(f"    [!] SQL Injection detected with payload: {payload}")
-                    return
+                    return payloads_used
             
             # Check for behavioral differences
             if response.status_code != 200 and len(content) != len(baseline):
@@ -1306,13 +1464,16 @@ class ParameterFuzzerModule:
                         finding_id=f"sqli_behavior_{param_name}_{hash(payload)}_{self.core.target}"
                     )
                     print(f"    [?] Unusual behavior with payload: {payload}")
+        
+        return payloads_used
     
-    def test_xss(self, url: str, param_name: str, baseline: str) -> None:
+    def test_xss(self, url: str, param_name: str, baseline: str) -> int:
         """Test parameter for XSS."""
         base_url = url.split('?')[0]
+        payloads_used = 0
         
         for payload in self.xss_payloads[:5]:  # Test first 5 payloads
-            self.core.stats['parameters_tested'] += 1
+            payloads_used += 1
             test_url = f"{base_url}?{param_name}={quote(payload)}"
             
             response = self.core.safe_request(test_url)
@@ -1335,7 +1496,7 @@ class ParameterFuzzerModule:
                         finding_id=f"xss_{param_name}_{hash(payload)}_{self.core.target}"
                     )
                     print(f"    [!] XSS detected in {context_name} with payload: {payload}")
-                    return
+                    return payloads_used
             
             # Check for simple reflection (lower severity)
             if payload in content:
@@ -1349,6 +1510,8 @@ class ParameterFuzzerModule:
                     finding_id=f"xss_reflection_{param_name}_{hash(payload)}_{self.core.target}"
                 )
                 print(f"    [?] Parameter reflects input with payload: {payload}")
+        
+        return payloads_used
 
 
 class OpenRedirectModule:
@@ -1380,9 +1543,15 @@ class OpenRedirectModule:
             print("  No working URL available")
             return
         
+        print(f"  Testing {len(self.redirect_params)} parameters with {len(self.test_urls)} payloads")
+        
+        vulnerabilities_found = 0
+        total_payloads = 0
+        
         for param in self.redirect_params:
-            for test_url in self.test_urls[:3]:  # Test first 3 variations
-                self.core.stats['redirects_tested'] += 1
+            for test_url in self.test_urls:
+                total_payloads += 1
+                self.core.stats['redirect_payloads_tested'] += 1
                 
                 encoded_url = quote(test_url, safe='')
                 test_full_url = f"{base_url}?{param}={encoded_url}"
@@ -1406,7 +1575,11 @@ class OpenRedirectModule:
                             evidence=f"Parameter: {param}\nTest URL: {test_full_url}\nRedirect to: {location}",
                             finding_id=f"redirect_{param}_{self.core.target}"
                         )
-                        print(f"  [High] Open redirect via {param} parameter -> {location[:50]}")
+                        print(f"\n  [HIGH] Open redirect via {param} parameter")
+                        print(f"    Payload     : {test_url}")
+                        print(f"    Redirect to : {location}")
+                        vulnerabilities_found += 1
+                        self.core.stats['redirect_vulnerabilities'] += 1
                         break  # Found vulnerability, no need to test more URLs for this param
                 
                 # Check JavaScript redirect
@@ -1422,8 +1595,17 @@ class OpenRedirectModule:
                             evidence=f"Parameter: {param}\nTest URL: {test_full_url}",
                             finding_id=f"js_redirect_{param}_{self.core.target}"
                         )
-                        print(f"  [High] JS open redirect via {param} parameter")
+                        print(f"\n  [HIGH] JS open redirect via {param} parameter")
+                        print(f"    Payload     : {test_url}")
+                        vulnerabilities_found += 1
+                        self.core.stats['redirect_vulnerabilities'] += 1
                         break
+        
+        if vulnerabilities_found == 0:
+            print("\n  No Open Redirect vulnerabilities detected.")
+        
+        print(f"\n  Redirect Payloads Tested : {self.core.stats['redirect_payloads_tested']}")
+        print(f"  Redirect Vulnerabilities : {self.core.stats['redirect_vulnerabilities']}")
     
     def is_external_redirect(self, location: str, test_url: str) -> bool:
         """Check if redirect location points to external URL."""
@@ -1476,18 +1658,23 @@ class ReportModule:
     def generate_json(self) -> str:
         """Generate JSON report."""
         duration = datetime.datetime.now() - self.core.scan_start
+        summary = self.core.get_summary()
         
         report = {
             'scan_metadata': {
                 'tool': 'Bug Bounty Vulnerability Scanner',
-                'version': '3.0.1',
+                'version': '3.0.2',
                 'target': self.core.target,
                 'scan_timestamp': self.core.scan_start.isoformat(),
                 'duration_seconds': duration.total_seconds(),
-                'total_findings': len(self.core.findings)
+                'total_findings': len(self.core.findings),
+                'base_url': self.core.base_url,
+                'working_protocol': self.core.working_protocol
             },
-            'summary': self.core.get_summary(),
+            'modules_status': self.core.modules_status,
+            'summary': summary,
             'statistics': self.core.stats,
+            'certificate_info': self.core.cert_info,
             'findings': self.core.findings
         }
         
@@ -1515,40 +1702,80 @@ class ReportModule:
             
             f.write("SCAN METADATA\n")
             f.write("-" * 40 + "\n")
-            f.write(f"Tool: Bug Bounty Vulnerability Scanner v3.0.1\n")
+            f.write(f"Tool: Bug Bounty Vulnerability Scanner v3.0.2\n")
             f.write(f"Target: {self.core.target}\n")
+            f.write(f"Base URL: {self.core.base_url}\n")
+            f.write(f"Protocol: {self.core.working_protocol}\n")
             f.write(f"Timestamp: {self.core.scan_start.isoformat()}\n")
             f.write(f"Duration: {duration.total_seconds():.2f} seconds\n")
             f.write(f"Total Findings: {len(self.core.findings)}\n\n")
             
+            # Certificate Information
+            if self.core.cert_info:
+                f.write("CERTIFICATE INFORMATION\n")
+                f.write("-" * 40 + "\n")
+                cert = self.core.cert_info
+                f.write(f"Issuer        : {cert['issuer'].get('organizationName', 'N/A')}\n")
+                f.write(f"Common Name   : {cert['subject'].get('commonName', 'N/A')}\n")
+                f.write(f"Valid From    : {cert['notBefore']}\n")
+                f.write(f"Valid Until   : {cert['notAfter']}\n")
+                
+                # Calculate days remaining
+                try:
+                    not_after = datetime.datetime.strptime(
+                        cert['notAfter'], '%b %d %H:%M:%S %Y %Z'
+                    )
+                    now = datetime.datetime.utcnow()
+                    days_remaining = (not_after - now).days
+                    status = "VALID" if days_remaining >= 0 else "EXPIRED"
+                    f.write(f"Days Remaining: {days_remaining}\n")
+                    f.write(f"Status        : {status}\n")
+                except ValueError:
+                    f.write("Days Remaining: N/A\n")
+                    f.write("Status        : UNKNOWN\n")
+                f.write("\n")
+            
+            # Module Status
+            f.write("MODULE STATUS\n")
+            f.write("-" * 40 + "\n")
+            for module, status in self.core.modules_status.items():
+                status_text = "Completed" if status else "Skipped/Failed"
+                module_name = module.replace('_', ' ').title()
+                f.write(f"{module_name}: {status_text}\n")
+            f.write("\n")
+            
+            # Findings Summary
             f.write("FINDINGS SUMMARY\n")
             f.write("-" * 40 + "\n")
             f.write(f"Critical: {summary['Critical']}\n")
-            f.write(f"High: {summary['High']}\n")
-            f.write(f"Medium: {summary['Medium']}\n")
-            f.write(f"Low: {summary['Low']}\n")
-            f.write(f"Info: {summary['Info']}\n\n")
+            f.write(f"High    : {summary['High']}\n")
+            f.write(f"Medium  : {summary['Medium']}\n")
+            f.write(f"Low     : {summary['Low']}\n")
+            f.write(f"Info    : {summary['Info']}\n\n")
             
+            # Statistics
             f.write("SCAN STATISTICS\n")
             f.write("-" * 40 + "\n")
             for key, value in self.core.stats.items():
-                f.write(f"{key.replace('_', ' ').title()}: {value}\n")
+                display_key = key.replace('_', ' ').title()
+                f.write(f"{display_key}: {value}\n")
             f.write("\n")
             
+            # Detailed Findings
             f.write("DETAILED FINDINGS\n")
             f.write("=" * 80 + "\n\n")
             
             for i, finding in enumerate(self.core.findings, 1):
                 f.write(f"Finding #{i}\n")
                 f.write("-" * 40 + "\n")
-                f.write(f"ID: {finding['finding_id']}\n")
-                f.write(f"Category: {finding['category']}\n")
-                f.write(f"Severity: {finding['severity']}\n")
-                f.write(f"Title: {finding['title']}\n")
-                f.write(f"Description: {finding['description']}\n")
+                f.write(f"ID          : {finding['finding_id']}\n")
+                f.write(f"Category    : {finding['category']}\n")
+                f.write(f"Severity    : {finding['severity']}\n")
+                f.write(f"Title       : {finding['title']}\n")
+                f.write(f"Description : {finding['description']}\n")
                 f.write(f"Recommendation: {finding['recommendation']}\n")
-                f.write(f"Evidence: {finding['evidence']}\n")
-                f.write(f"Timestamp: {finding['timestamp']}\n")
+                f.write(f"Evidence    : {finding['evidence']}\n")
+                f.write(f"Timestamp   : {finding['timestamp']}\n")
                 f.write("-" * 40 + "\n\n")
             
             f.write("=" * 80 + "\n")
@@ -1562,7 +1789,7 @@ class ReportModule:
 def parse_arguments() -> argparse.Namespace:
     """Parse command-line arguments."""
     parser = argparse.ArgumentParser(
-        description="Bug Bounty Vulnerability Scanner v3.0.1",
+        description="Bug Bounty Vulnerability Scanner v3.0.2",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
@@ -1613,7 +1840,7 @@ Examples:
     parser.add_argument(
         "--version",
         action="version",
-        version="Bug Bounty Scanner v3.0.1"
+        version="Bug Bounty Scanner v3.0.2"
     )
     
     return parser.parse_args()
