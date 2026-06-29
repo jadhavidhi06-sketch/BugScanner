@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Bug Bounty Vulnerability Scanner
-Version: 3.0.2
+Version: 3.0.3
 Author: Security Engineering Team
 License: MIT (Authorized Testing Only)
 
@@ -19,6 +19,7 @@ import socket
 import ssl
 import sys
 import time
+import warnings
 from typing import Dict, List, Optional, Set, Tuple, Any
 from urllib.parse import urljoin, urlparse, parse_qs, quote
 
@@ -27,6 +28,9 @@ import dns.exception
 import requests
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
+
+# Suppress deprecation warnings for legacy protocol testing
+warnings.filterwarnings("ignore", category=DeprecationWarning, module="ssl")
 
 
 class ScannerCore:
@@ -43,6 +47,7 @@ class ScannerCore:
         # Working URL (determined during reconnaissance)
         self.base_url: Optional[str] = None
         self.working_protocol: Optional[str] = None
+        self.resolved_ip: Optional[str] = None
         
         # Scan metadata
         self.scan_start = datetime.datetime.now()
@@ -94,6 +99,12 @@ class ScannerCore:
         
         # Certificate info
         self.cert_info: Optional[Dict[str, Any]] = None
+        self.server_banner: Optional[str] = None
+        
+        # DNS records storage
+        self.dns_records: Dict[str, List[str]] = {}
+        self.open_ports: Dict[int, str] = {}
+        self.subdomains_found: List[str] = []
     
     def _normalize_target(self, target: str) -> str:
         """Normalize target to clean domain format."""
@@ -161,6 +172,7 @@ class ScannerCore:
         if response and response.status_code < 400:
             self.base_url = https_url
             self.working_protocol = "https"
+            self.server_banner = response.headers.get('Server', 'Unknown')
             return self.base_url
         
         # Try HTTP as fallback
@@ -169,6 +181,7 @@ class ScannerCore:
         if response and response.status_code < 400:
             self.base_url = http_url
             self.working_protocol = "http"
+            self.server_banner = response.headers.get('Server', 'Unknown')
             return self.base_url
         
         # Try HTTPS with redirects
@@ -176,6 +189,7 @@ class ScannerCore:
         if response:
             self.base_url = response.url
             self.working_protocol = "https"
+            self.server_banner = response.headers.get('Server', 'Unknown')
             return self.base_url
         
         # Try HTTP with redirects
@@ -183,6 +197,7 @@ class ScannerCore:
         if response:
             self.base_url = response.url
             self.working_protocol = "http"
+            self.server_banner = response.headers.get('Server', 'Unknown')
             return self.base_url
         
         return None
@@ -244,9 +259,12 @@ class ScannerCore:
         """Resolve DNS records of specified type."""
         try:
             answers = self.resolver.resolve(self.target, record_type)
-            return [str(r) for r in answers]
+            records = [str(r) for r in answers]
+            self.dns_records[record_type] = records
+            return records
         except (dns.resolver.NoAnswer, dns.resolver.NXDOMAIN,
                 dns.exception.Timeout, dns.resolver.NoNameservers):
+            self.dns_records[record_type] = []
             return []
     
     def get_summary(self) -> Dict[str, int]:
@@ -262,7 +280,7 @@ class ScannerCore:
         """Print scanner banner."""
         print("""
     ╔══════════════════════════════════════════════════════════════╗
-    ║          Bug Bounty Vulnerability Scanner v3.0.2             ║
+    ║          Bug Bounty Vulnerability Scanner v3.0.3             ║
     ║              For Authorized Testing Only                     ║
     ╚══════════════════════════════════════════════════════════════╝
         """)
@@ -541,16 +559,16 @@ class ReconModule:
         print("\n  [IP Resolution]")
         ip_records = self.core.resolve_dns('A')
         if ip_records:
-            ip_address = ip_records[0]
-            print(f"    IP: {ip_address}")
+            self.core.resolved_ip = ip_records[0]
+            print(f"    IP: {self.core.resolved_ip}")
             
             self.core.add_finding(
                 category="Target Reconnaissance",
                 severity="Info",
                 title="IP Address Resolved",
-                description=f"Target resolves to {ip_address}",
+                description=f"Target resolves to {self.core.resolved_ip}",
                 recommendation="Document IP for further analysis",
-                evidence=f"IP: {ip_address}",
+                evidence=f"IP: {self.core.resolved_ip}",
                 finding_id=f"ip_{self.core.target}"
             )
         
@@ -558,6 +576,7 @@ class ReconModule:
         print("\n  [Subdomain Enumeration]")
         wordlist = self.load_wordlist()
         found_subdomains = self.enumerate_subdomains(wordlist)
+        self.core.subdomains_found = found_subdomains
         
         if found_subdomains:
             self.core.stats['subdomains'] = len(found_subdomains)
@@ -580,6 +599,7 @@ class ReconModule:
         # Port Scanning
         print("\n  [Port Scanning]")
         open_ports = self.scan_ports()
+        self.core.open_ports = open_ports
         
         if open_ports:
             self.core.stats['open_ports'] = len(open_ports)
@@ -769,7 +789,7 @@ class TLSModule:
         # Test protocol support
         self.test_protocols()
         
-        # Display protocol results
+        # Display protocol results (only once)
         self.display_protocol_results()
     
     def get_certificate_info(self) -> Optional[Dict[str, Any]]:
@@ -806,13 +826,8 @@ class TLSModule:
     
     def analyze_certificate(self, cert_info: Dict[str, Any]) -> None:
         """Analyze certificate and display information."""
-        self.core.stats['tls_protocols_tested'] += 1
-        
         # Parse dates
         try:
-            not_before = datetime.datetime.strptime(
-                cert_info['notBefore'], '%b %d %H:%M:%S %Y %Z'
-            )
             not_after = datetime.datetime.strptime(
                 cert_info['notAfter'], '%b %d %H:%M:%S %Y %Z'
             )
@@ -876,36 +891,16 @@ class TLSModule:
                 evidence=f"Subject matches issuer: {cert_info['subject']}",
                 finding_id=f"cert_selfsigned_{self.core.target}"
             )
-        
-        # Add informational finding
-        self.core.add_finding(
-            category="SSL/TLS Analysis",
-            severity="Info",
-            title="SSL Certificate Details",
-            description=f"Certificate issued to: {cert_info['subject'].get('commonName', 'N/A')}\n"
-                       f"Issued by: {cert_info['issuer'].get('organizationName', 'N/A')}\n"
-                       f"Valid until: {cert_info['notAfter']}\n"
-                       f"Days remaining: {days_remaining}\n"
-                       f"Status: {status}",
-            recommendation="Monitor certificate expiry",
-            evidence=f"Certificate: {cert_info}",
-            finding_id=f"cert_info_{self.core.target}"
-        )
     
     def test_protocols(self) -> None:
         """Test actual protocol support through real handshakes."""
-        print("\n  [Protocol Testing]")
-        print("-" * 40)
-        
         # Test modern protocols
         for protocol_name, tls_version in self.modern_protocols.items():
             self.core.stats['tls_protocols_tested'] += 1
             if self._test_tls_version(tls_version):
                 self.protocol_support[protocol_name] = "Supported"
-                print(f"  {protocol_name:12} Supported")
             else:
                 self.protocol_support[protocol_name] = "Not Supported"
-                print(f"  {protocol_name:12} Not Supported")
         
         # Test legacy protocols
         legacy_supported = []
@@ -916,14 +911,10 @@ class TLSModule:
                     self.protocol_support[protocol_name] = "Supported"
                     if protocol_name in self.weak_protocol_list:
                         legacy_supported.append(protocol_name)
-                    print(f"  {protocol_name:12} Supported (WEAK)")
                 else:
                     self.protocol_support[protocol_name] = "Not Supported"
-                    print(f"  {protocol_name:12} Not Supported")
-            except DeprecationWarning:
-                # Gracefully handle deprecation warnings
-                self.protocol_support[protocol_name] = "Skipped"
-                print(f"  {protocol_name:12} Skipped (deprecated)")
+            except:
+                self.protocol_support[protocol_name] = "Not Supported"
         
         # Track weak protocols
         self.weak_protocols_detected = legacy_supported
@@ -943,7 +934,7 @@ class TLSModule:
     
     def display_protocol_results(self) -> None:
         """Display protocol testing results professionally."""
-        print("\n  Protocol Testing")
+        print("\n  [Protocol Testing Results]")
         print("-" * 40)
         
         for protocol, status in self.protocol_support.items():
@@ -989,86 +980,70 @@ class TLSModule:
         if cache_key in self.core.protocol_support_cache:
             return self.core.protocol_support_cache[cache_key]
         
-        # Get the protocol version number
-        if protocol == 'SSLv2':
-            version_num = 0x0002
-        elif protocol == 'SSLv3':
-            version_num = 0x0300
-        elif protocol == 'TLS 1.0':
-            version_num = 0x0301
-        elif protocol == 'TLS 1.1':
-            version_num = 0x0302
-        else:
-            self.core.protocol_support_cache[cache_key] = False
-            return False
-        
         try:
-            # Try to connect with the specific protocol using a custom SSLContext
-            context = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
-            context.check_hostname = False
-            context.verify_mode = ssl.CERT_NONE
+            # SSLv2 and SSLv3 are completely deprecated and not supported in modern Python
+            if protocol in ['SSLv2', 'SSLv3']:
+                # Attempt a connection with SSLv3-specific context (will fail on modern systems)
+                try:
+                    # This is the only way to test SSLv3 in modern Python
+                    # It will raise a deprecation warning but that's expected
+                    context = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+                    context.check_hostname = False
+                    context.verify_mode = ssl.CERT_NONE
+                    
+                    # Try to connect - this will fail if SSLv3 is not supported
+                    with socket.create_connection(
+                        (self.core.target, 443), timeout=5
+                    ) as sock:
+                        with context.wrap_socket(sock, server_hostname=self.core.target) as ssock:
+                            # If we get here, the connection succeeded but it's using a higher version
+                            # SSLv3 is almost certainly not supported
+                            return False
+                except:
+                    return False
             
-            # For legacy protocols, we need to try different approaches
-            if protocol in ['TLS 1.0', 'TLS 1.1']:
-                # These can be tested with specific minimum/maximum versions
+            elif protocol in ['TLS 1.0', 'TLS 1.1']:
+                # Test with specific minimum/maximum versions
+                context = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+                context.check_hostname = False
+                context.verify_mode = ssl.CERT_NONE
+                
                 if protocol == 'TLS 1.0':
-                    context.minimum_version = ssl.TLSVersion.TLSv1
-                    context.maximum_version = ssl.TLSVersion.TLSv1
+                    # TLS 1.0 is deprecated but can be tested with min/max
+                    try:
+                        context.minimum_version = ssl.TLSVersion.TLSv1
+                        context.maximum_version = ssl.TLSVersion.TLSv1
+                    except AttributeError:
+                        return False
                 elif protocol == 'TLS 1.1':
-                    context.minimum_version = ssl.TLSVersion.TLSv1_1
-                    context.maximum_version = ssl.TLSVersion.TLSv1_1
+                    try:
+                        context.minimum_version = ssl.TLSVersion.TLSv1_1
+                        context.maximum_version = ssl.TLSVersion.TLSv1_1
+                    except AttributeError:
+                        return False
                 
                 try:
                     with socket.create_connection(
                         (self.core.target, 443), timeout=5
                     ) as sock:
                         with context.wrap_socket(sock, server_hostname=self.core.target) as ssock:
-                            # Check if the negotiated version matches
                             negotiated_version = ssock.version()
-                            if negotiated_version and protocol.lower().replace(' ', '') in negotiated_version.lower().replace('.', ''):
-                                self.core.protocol_support_cache[cache_key] = True
-                                return True
+                            if negotiated_version:
+                                # Check if the negotiated version matches
+                                version_lower = negotiated_version.lower().replace('.', '').replace(' ', '')
+                                protocol_lower = protocol.lower().replace('.', '').replace(' ', '')
+                                if protocol_lower in version_lower:
+                                    self.core.protocol_support_cache[cache_key] = True
+                                    return True
                 except:
-                    self.core.protocol_support_cache[cache_key] = False
-                    return False
+                    pass
             
-            elif protocol == 'SSLv3':
-                # SSLv3 is completely deprecated and unsupported in modern Python
-                # Try a different approach - check for SSLv3 cipher support
-                try:
-                    # Try to connect with SSLv3-specific settings
-                    # This will almost certainly fail, but we need to be accurate
-                    with socket.create_connection(
-                        (self.core.target, 443), timeout=5
-                    ) as sock:
-                        # Just a regular connection to check if SSLv3 might be supported
-                        # In practice, this is extremely unlikely to succeed
-                        with ssl.create_default_context().wrap_socket(
-                            sock, server_hostname=self.core.target
-                        ) as ssock:
-                            # If we get here, the server supports at least TLS 1.0 or higher
-                            # SSLv3 is almost certainly not supported
-                            pass
-                    
-                    # Since SSLv3 is not supported in modern Python, we can't actually negotiate it
-                    # We'll mark it as not supported
-                    self.core.protocol_support_cache[cache_key] = False
-                    return False
-                except:
-                    self.core.protocol_support_cache[cache_key] = False
-                    return False
-            
-            elif protocol == 'SSLv2':
-                # SSLv2 is completely obsolete
-                self.core.protocol_support_cache[cache_key] = False
-                return False
+            self.core.protocol_support_cache[cache_key] = False
+            return False
             
         except Exception:
             self.core.protocol_support_cache[cache_key] = False
             return False
-        
-        self.core.protocol_support_cache[cache_key] = False
-        return False
 
 
 class SensitiveFilesModule:
@@ -1346,8 +1321,6 @@ class ParameterFuzzerModule:
         total_payloads = 0
         # Test each parameter
         for param_name, param_url in params:
-            print(f"\n  Testing parameter: {param_name}")
-            
             # Get baseline response
             baseline = self.get_baseline(param_url, param_name)
             if not baseline:
@@ -1546,11 +1519,9 @@ class OpenRedirectModule:
         print(f"  Testing {len(self.redirect_params)} parameters with {len(self.test_urls)} payloads")
         
         vulnerabilities_found = 0
-        total_payloads = 0
         
         for param in self.redirect_params:
             for test_url in self.test_urls:
-                total_payloads += 1
                 self.core.stats['redirect_payloads_tested'] += 1
                 
                 encoded_url = quote(test_url, safe='')
@@ -1663,17 +1634,22 @@ class ReportModule:
         report = {
             'scan_metadata': {
                 'tool': 'Bug Bounty Vulnerability Scanner',
-                'version': '3.0.2',
+                'version': '3.0.3',
                 'target': self.core.target,
+                'resolved_ip': self.core.resolved_ip,
                 'scan_timestamp': self.core.scan_start.isoformat(),
                 'duration_seconds': duration.total_seconds(),
                 'total_findings': len(self.core.findings),
                 'base_url': self.core.base_url,
-                'working_protocol': self.core.working_protocol
+                'working_protocol': self.core.working_protocol,
+                'server_banner': self.core.server_banner
             },
             'modules_status': self.core.modules_status,
             'summary': summary,
             'statistics': self.core.stats,
+            'dns_records': self.core.dns_records,
+            'open_ports': self.core.open_ports,
+            'subdomains': self.core.subdomains_found,
             'certificate_info': self.core.cert_info,
             'findings': self.core.findings
         }
@@ -1702,13 +1678,40 @@ class ReportModule:
             
             f.write("SCAN METADATA\n")
             f.write("-" * 40 + "\n")
-            f.write(f"Tool: Bug Bounty Vulnerability Scanner v3.0.2\n")
-            f.write(f"Target: {self.core.target}\n")
-            f.write(f"Base URL: {self.core.base_url}\n")
-            f.write(f"Protocol: {self.core.working_protocol}\n")
-            f.write(f"Timestamp: {self.core.scan_start.isoformat()}\n")
-            f.write(f"Duration: {duration.total_seconds():.2f} seconds\n")
-            f.write(f"Total Findings: {len(self.core.findings)}\n\n")
+            f.write(f"Tool           : Bug Bounty Vulnerability Scanner v3.0.3\n")
+            f.write(f"Target         : {self.core.target}\n")
+            f.write(f"Resolved IP    : {self.core.resolved_ip or 'N/A'}\n")
+            f.write(f"Base URL       : {self.core.base_url}\n")
+            f.write(f"Protocol       : {self.core.working_protocol}\n")
+            f.write(f"Server Banner  : {self.core.server_banner or 'N/A'}\n")
+            f.write(f"Timestamp      : {self.core.scan_start.isoformat()}\n")
+            f.write(f"Duration       : {duration.total_seconds():.2f} seconds\n")
+            f.write(f"Total Findings : {len(self.core.findings)}\n\n")
+            
+            # DNS Records
+            if self.core.dns_records:
+                f.write("DNS RECORDS\n")
+                f.write("-" * 40 + "\n")
+                for record_type, records in self.core.dns_records.items():
+                    if records:
+                        f.write(f"{record_type}: {', '.join(records)}\n")
+                f.write("\n")
+            
+            # Open Ports
+            if self.core.open_ports:
+                f.write("OPEN PORTS\n")
+                f.write("-" * 40 + "\n")
+                for port, service in sorted(self.core.open_ports.items()):
+                    f.write(f"Port {port}: {service}\n")
+                f.write("\n")
+            
+            # Subdomains
+            if self.core.subdomains_found:
+                f.write("SUBDOMAINS FOUND\n")
+                f.write("-" * 40 + "\n")
+                for subdomain in sorted(self.core.subdomains_found):
+                    f.write(f"{subdomain}\n")
+                f.write("\n")
             
             # Certificate Information
             if self.core.cert_info:
@@ -1789,7 +1792,7 @@ class ReportModule:
 def parse_arguments() -> argparse.Namespace:
     """Parse command-line arguments."""
     parser = argparse.ArgumentParser(
-        description="Bug Bounty Vulnerability Scanner v3.0.2",
+        description="Bug Bounty Vulnerability Scanner v3.0.3",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
@@ -1840,7 +1843,7 @@ Examples:
     parser.add_argument(
         "--version",
         action="version",
-        version="Bug Bounty Scanner v3.0.2"
+        version="Bug Bounty Scanner v3.0.3"
     )
     
     return parser.parse_args()
