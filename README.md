@@ -1,4 +1,3 @@
-```markdown
 <div align="center">
 
 # 🛡️ Bug Bounty Vulnerability Scanner
@@ -594,4 +593,4 @@ Unauthorized scanning of systems may be illegal and could result in civil or cri
 🛡️ Built for the Bug Bounty Community
 
 </div>
-```
+
