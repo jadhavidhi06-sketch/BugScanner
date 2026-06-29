@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Bug Bounty Vulnerability Scanner
-Version: 3.0.0
+Version: 3.0.1
 Author: Security Engineering Team
 License: MIT (Authorized Testing Only)
 
@@ -40,6 +40,10 @@ class ScannerCore:
         self.timeout = timeout
         self.verify_ssl = verify_ssl
         
+        # Working URL (determined during reconnaissance)
+        self.base_url: Optional[str] = None
+        self.working_protocol: Optional[str] = None
+        
         # Scan metadata
         self.scan_start = datetime.datetime.now()
         self.scan_id = self.scan_start.strftime("%Y%m%d_%H%M%S")
@@ -65,8 +69,12 @@ class ScannerCore:
             'tls_checks': 0,
             'sensitive_paths': 0,
             'parameters_tested': 0,
-            'redirects_tested': 0
+            'redirects_tested': 0,
+            'tls_protocols_tested': 0
         }
+        
+        # Protocol support cache
+        self.protocol_support_cache: Dict[str, bool] = {}
     
     def _normalize_target(self, target: str) -> str:
         """Normalize target to clean domain format."""
@@ -122,6 +130,43 @@ class ScannerCore:
             urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
         
         return session
+    
+    def determine_base_url(self) -> Optional[str]:
+        """Determine the working base URL by trying HTTPS first, then HTTP."""
+        if self.base_url:
+            return self.base_url
+        
+        # Try HTTPS first
+        https_url = f"https://{self.target}"
+        response = self.safe_request(https_url, allow_redirects=False)
+        if response and response.status_code < 400:
+            self.base_url = https_url
+            self.working_protocol = "https"
+            return self.base_url
+        
+        # Try HTTP as fallback
+        http_url = f"http://{self.target}"
+        response = self.safe_request(http_url, allow_redirects=False)
+        if response and response.status_code < 400:
+            self.base_url = http_url
+            self.working_protocol = "http"
+            return self.base_url
+        
+        # Try HTTPS with redirects
+        response = self.safe_request(https_url, allow_redirects=True)
+        if response:
+            self.base_url = response.url
+            self.working_protocol = "https"
+            return self.base_url
+        
+        # Try HTTP with redirects
+        response = self.safe_request(http_url, allow_redirects=True)
+        if response:
+            self.base_url = response.url
+            self.working_protocol = "http"
+            return self.base_url
+        
+        return None
     
     def add_finding(self, category: str, severity: str, title: str,
                     description: str, recommendation: str,
@@ -204,7 +249,7 @@ class ScannerCore:
         """Print scanner banner."""
         print("""
     ╔══════════════════════════════════════════════════════════════╗
-    ║          Bug Bounty Vulnerability Scanner v3.0.0             ║
+    ║          Bug Bounty Vulnerability Scanner v3.0.1             ║
     ║              For Authorized Testing Only                     ║
     ╚══════════════════════════════════════════════════════════════╝
         """)
@@ -221,6 +266,18 @@ class ScannerCore:
         print(f"Started: {self.scan_start.strftime('%Y-%m-%d %H:%M:%S')}")
         print(f"Threads: {self.threads}")
         print(f"Timeout: {self.timeout}s")
+        self.print_separator()
+        
+        # Determine base URL first
+        base_url = self.determine_base_url()
+        if not base_url:
+            print("\n[ERROR] Could not establish connection to target")
+            print(f"  Neither HTTPS nor HTTP worked for {self.target}")
+            print("  Please check if the target is accessible and try again.")
+            return
+        
+        print(f"Working URL: {base_url}")
+        print(f"Protocol: {self.working_protocol}")
         self.print_separator()
         
         # Execute scan phases
@@ -250,6 +307,10 @@ class ScannerCore:
         print("\n[Phase 2] Security Headers Analysis")
         print("-" * 40)
         
+        if not self.base_url:
+            print("  No working URL found, skipping...")
+            return
+        
         headers = SecurityHeadersModule(self)
         headers.run()
     
@@ -258,13 +319,21 @@ class ScannerCore:
         print("\n[Phase 3] SSL/TLS Analysis")
         print("-" * 40)
         
-        tls = TLSModule(self)
-        tls.run()
+        # Only run TLS analysis for HTTPS
+        if self.working_protocol == "https":
+            tls = TLSModule(self)
+            tls.run()
+        else:
+            print("  Skipping TLS analysis (HTTP only)")
     
     def phase_sensitive_files(self) -> None:
         """Phase 4: Sensitive files discovery."""
         print("\n[Phase 4] Sensitive Files Discovery")
         print("-" * 40)
+        
+        if not self.base_url:
+            print("  No working URL found, skipping...")
+            return
         
         sensitive = SensitiveFilesModule(self)
         sensitive.run()
@@ -274,6 +343,10 @@ class ScannerCore:
         print("\n[Phase 5] Parameter Fuzzing")
         print("-" * 40)
         
+        if not self.base_url:
+            print("  No working URL found, skipping...")
+            return
+        
         fuzzer = ParameterFuzzerModule(self)
         fuzzer.run()
     
@@ -281,6 +354,10 @@ class ScannerCore:
         """Phase 6: Open redirect checking."""
         print("\n[Phase 6] Open Redirect Check")
         print("-" * 40)
+        
+        if not self.base_url:
+            print("  No working URL found, skipping...")
+            return
         
         redirect = OpenRedirectModule(self)
         redirect.run()
@@ -562,7 +639,11 @@ class SecurityHeadersModule:
     
     def run(self) -> None:
         """Execute security headers analysis."""
-        url = f"https://{self.core.target}"
+        url = self.core.base_url
+        if not url:
+            print("  No working URL available")
+            return
+        
         response = self.core.safe_request(url)
         
         if not response:
@@ -600,16 +681,14 @@ class TLSModule:
     def __init__(self, core: ScannerCore):
         self.core = core
         
-        # Protocol versions to test
+        # Protocol versions to test (modern mapping)
         self.protocols = {
-            'SSLv2': None,  # Not supported in modern Python
-            'SSLv3': None,  # Not supported in modern Python
-            'TLSv1.0': ssl.TLSVersion.TLSv1,
-            'TLSv1.1': ssl.TLSVersion.TLSv1_1,
             'TLSv1.2': ssl.TLSVersion.TLSv1_2,
             'TLSv1.3': ssl.TLSVersion.TLSv1_3
         }
         
+        # Legacy protocols with alternative testing
+        self.legacy_protocols = ['SSLv2', 'SSLv3', 'TLSv1.0', 'TLSv1.1']
         self.weak_protocols = ['SSLv2', 'SSLv3', 'TLSv1.0', 'TLSv1.1']
     
     def run(self) -> None:
@@ -652,8 +731,7 @@ class TLSModule:
                         'version': cert.get('version', 'Unknown'),
                         'subjectAltName': cert.get('subjectAltName', [])
                     }
-        except Exception as e:
-            print(f"  Certificate retrieval failed: {e}")
+        except Exception:
             return None
     
     def analyze_certificate(self, cert_info: Dict[str, Any]) -> None:
@@ -719,26 +797,22 @@ class TLSModule:
         print("\n  [Protocol Testing]")
         supported_weak = []
         
-        for protocol_name in self.protocols:
-            if protocol_name in ['SSLv2', 'SSLv3']:
-                # These protocols are not supported in modern Python
-                # We check for them by attempting connections with specific cipher suites
-                if self._test_legacy_protocol(protocol_name):
-                    supported_weak.append(protocol_name)
-                    print(f"    [!] {protocol_name}: Supported (WEAK)")
-                else:
-                    print(f"    [+] {protocol_name}: Not supported")
-                continue
-            
-            tls_version = self.protocols[protocol_name]
+        # Test modern protocols first
+        for protocol_name, tls_version in self.protocols.items():
+            self.core.stats['tls_protocols_tested'] += 1
             if self._test_tls_version(tls_version):
-                if protocol_name in self.weak_protocols:
-                    supported_weak.append(protocol_name)
-                    print(f"    [!] {protocol_name}: Supported (WEAK)")
-                else:
-                    print(f"    [+] {protocol_name}: Supported")
+                print(f"    [+] {protocol_name}: Supported")
             else:
-                print(f"    [+] {protocol_name}: Not supported")
+                print(f"    [-] {protocol_name}: Not supported")
+        
+        # Test legacy protocols with specific error handling
+        for protocol_name in self.legacy_protocols:
+            self.core.stats['tls_protocols_tested'] += 1
+            if self._test_legacy_protocol(protocol_name):
+                supported_weak.append(protocol_name)
+                print(f"    [!] {protocol_name}: Supported (WEAK)")
+            else:
+                print(f"    [-] {protocol_name}: Not supported")
         
         if supported_weak:
             self.core.add_finding(
@@ -755,6 +829,11 @@ class TLSModule:
     
     def _test_tls_version(self, tls_version: ssl.TLSVersion) -> bool:
         """Test if a specific TLS version is supported."""
+        # Check cache first
+        cache_key = f"tls_{tls_version}"
+        if cache_key in self.core.protocol_support_cache:
+            return self.core.protocol_support_cache[cache_key]
+        
         try:
             context = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
             context.minimum_version = tls_version
@@ -766,31 +845,98 @@ class TLSModule:
                 (self.core.target, 443), timeout=5
             ) as sock:
                 with context.wrap_socket(sock, server_hostname=self.core.target) as ssock:
-                    return True
+                    # Verify the connection was established
+                    if ssock.version():
+                        self.core.protocol_support_cache[cache_key] = True
+                        return True
         except (ssl.SSLError, socket.timeout, ConnectionRefusedError, OSError):
-            return False
+            pass
+        
+        self.core.protocol_support_cache[cache_key] = False
+        return False
     
     def _test_legacy_protocol(self, protocol: str) -> bool:
-        """Test for legacy SSL protocols using cipher-based detection."""
+        """Test for legacy SSL protocols using multiple approaches."""
+        cache_key = f"legacy_{protocol}"
+        if cache_key in self.core.protocol_support_cache:
+            return self.core.protocol_support_cache[cache_key]
+        
+        # Try standard TLS connection first
         try:
-            # Attempt connection with specific cipher that indicates legacy support
-            context = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+            context = ssl.create_default_context()
             context.check_hostname = False
             context.verify_mode = ssl.CERT_NONE
             
-            # Set ciphers that would only work with legacy protocols
-            if protocol == 'SSLv2':
-                context.set_ciphers('SSLv2')
-            elif protocol == 'SSLv3':
-                context.set_ciphers('SSLv3')
-            
+            # Try to get cipher list that might indicate legacy support
             with socket.create_connection(
                 (self.core.target, 443), timeout=5
             ) as sock:
                 with context.wrap_socket(sock, server_hostname=self.core.target) as ssock:
-                    return True
-        except (ssl.SSLError, socket.timeout, ConnectionRefusedError, OSError):
-            return False
+                    # Check if the server advertises any weak ciphers
+                    cipher = ssock.cipher()
+                    if cipher and any(weak in cipher[0].lower() for weak in 
+                                     ['rc4', 'des', 'export', 'null']):
+                        self.core.protocol_support_cache[cache_key] = True
+                        return True
+        except:
+            pass
+        
+        # Try connecting with specific SSL/TLS version using ssl.wrap_socket (legacy)
+        # This is a fallback for systems where modern SSLContext might not catch all
+        try:
+            import ssl as ssl_module
+            
+            # Different approach for different protocols
+            if protocol == 'SSLv2':
+                # SSLv2 is mostly dead, try with specific cipher
+                try:
+                    context = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+                    context.set_ciphers('ALL:!aNULL:!eNULL:!EXPORT:!DES:!RC4:!3DES:!MD5:!PSK:!SRP')
+                    context.check_hostname = False
+                    context.verify_mode = ssl.CERT_NONE
+                    
+                    with socket.create_connection(
+                        (self.core.target, 443), timeout=5
+                    ) as sock:
+                        with context.wrap_socket(sock, server_hostname=self.core.target) as ssock:
+                            # If we get here, SSLv2-like ciphers might be supported
+                            self.core.protocol_support_cache[cache_key] = True
+                            return True
+                except:
+                    pass
+            
+            elif protocol in ['SSLv3', 'TLSv1.0', 'TLSv1.1']:
+                # Try with minimal TLS version
+                try:
+                    context = ssl.create_default_context()
+                    context.check_hostname = False
+                    context.verify_mode = ssl.CERT_NONE
+                    
+                    # Force older TLS version
+                    if protocol == 'SSLv3':
+                        # SSLv3 is not supported in modern Python, but we can try
+                        pass
+                    elif protocol == 'TLSv1.0':
+                        context.minimum_version = ssl.TLSVersion.TLSv1
+                        context.maximum_version = ssl.TLSVersion.TLSv1
+                    elif protocol == 'TLSv1.1':
+                        context.minimum_version = ssl.TLSVersion.TLSv1_1
+                        context.maximum_version = ssl.TLSVersion.TLSv1_1
+                    
+                    with socket.create_connection(
+                        (self.core.target, 443), timeout=5
+                    ) as sock:
+                        with context.wrap_socket(sock, server_hostname=self.core.target) as ssock:
+                            if ssock.version() and protocol.lower() in ssock.version().lower():
+                                self.core.protocol_support_cache[cache_key] = True
+                                return True
+                except:
+                    pass
+        except:
+            pass
+        
+        self.core.protocol_support_cache[cache_key] = False
+        return False
 
 
 class SensitiveFilesModule:
@@ -884,7 +1030,10 @@ class SensitiveFilesModule:
     
     def run(self) -> None:
         """Execute sensitive files discovery."""
-        base_url = f"https://{self.core.target}"
+        base_url = self.core.base_url
+        if not base_url:
+            print("  No working URL available")
+            return
         
         with concurrent.futures.ThreadPoolExecutor(max_workers=self.core.threads) as executor:
             futures = {}
@@ -1034,8 +1183,13 @@ class ParameterFuzzerModule:
     
     def run(self) -> None:
         """Execute parameter fuzzing."""
+        base_url = self.core.base_url
+        if not base_url:
+            print("  No working URL available")
+            return
+        
         # First, find parameters on the target
-        params = self.discover_parameters()
+        params = self.discover_parameters(base_url)
         
         if not params:
             print("  No parameters found to test")
@@ -1058,12 +1212,11 @@ class ParameterFuzzerModule:
             # Test XSS
             self.test_xss(param_url, param_name, baseline)
     
-    def discover_parameters(self) -> List[Tuple[str, str]]:
+    def discover_parameters(self, base_url: str) -> List[Tuple[str, str]]:
         """Discover URL parameters from target."""
         params = []
-        url = f"https://{self.core.target}"
         
-        response = self.core.safe_request(url)
+        response = self.core.safe_request(base_url)
         if not response:
             return params
         
@@ -1075,7 +1228,7 @@ class ParameterFuzzerModule:
             parsed = urlparse(match)
             query_params = parse_qs(parsed.query)
             for param_name in query_params:
-                params.append((param_name, urljoin(url, match)))
+                params.append((param_name, urljoin(base_url, match)))
         
         # Find parameters in forms
         form_pattern = re.compile(
@@ -1089,7 +1242,7 @@ class ParameterFuzzerModule:
                 re.IGNORECASE
             )
             for input_name in input_pattern.findall(form_content):
-                params.append((input_name, urljoin(url, action)))
+                params.append((input_name, urljoin(base_url, action)))
         
         # Remove duplicates while preserving order
         seen = set()
@@ -1222,7 +1375,10 @@ class OpenRedirectModule:
     
     def run(self) -> None:
         """Execute open redirect checks."""
-        base_url = f"https://{self.core.target}"
+        base_url = self.core.base_url
+        if not base_url:
+            print("  No working URL available")
+            return
         
         for param in self.redirect_params:
             for test_url in self.test_urls[:3]:  # Test first 3 variations
@@ -1324,7 +1480,7 @@ class ReportModule:
         report = {
             'scan_metadata': {
                 'tool': 'Bug Bounty Vulnerability Scanner',
-                'version': '3.0.0',
+                'version': '3.0.1',
                 'target': self.core.target,
                 'scan_timestamp': self.core.scan_start.isoformat(),
                 'duration_seconds': duration.total_seconds(),
@@ -1359,7 +1515,7 @@ class ReportModule:
             
             f.write("SCAN METADATA\n")
             f.write("-" * 40 + "\n")
-            f.write(f"Tool: Bug Bounty Vulnerability Scanner v3.0.0\n")
+            f.write(f"Tool: Bug Bounty Vulnerability Scanner v3.0.1\n")
             f.write(f"Target: {self.core.target}\n")
             f.write(f"Timestamp: {self.core.scan_start.isoformat()}\n")
             f.write(f"Duration: {duration.total_seconds():.2f} seconds\n")
@@ -1406,7 +1562,7 @@ class ReportModule:
 def parse_arguments() -> argparse.Namespace:
     """Parse command-line arguments."""
     parser = argparse.ArgumentParser(
-        description="Bug Bounty Vulnerability Scanner v3.0.0",
+        description="Bug Bounty Vulnerability Scanner v3.0.1",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
@@ -1457,7 +1613,7 @@ Examples:
     parser.add_argument(
         "--version",
         action="version",
-        version="Bug Bounty Scanner v3.0.0"
+        version="Bug Bounty Scanner v3.0.1"
     )
     
     return parser.parse_args()
